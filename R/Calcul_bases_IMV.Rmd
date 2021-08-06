@@ -1,0 +1,206 @@
+---
+title: "Defineix denominador pel càlcul del IMV"
+output: html_document
+---
+
+El document presenta els càlculs per extreure la proporció de __llars__ beneficiàries del IMV a diferents nivells del territori. 
+
+El RMD està pensat per a que es pugui canviar la referència de les dades (ECV) i els numeradors a partir del document de la lara, i executar de manera que retorni directament les dades clau que caldrà incloure al excel de paràmetres de la simulació: % de llars beneficiàries. 
+
+En el càlcul del nombre de llars beneficiàries distingeix 2 grups: 
+    1) L'assignació d'ofici que fan inicialment a llars amb fills i rendes baixes
+    2) L'assignació per la resta de llars
+
+El càlcul del nombre de beneficiaris d'ofici fa servir un proxy: pren la proporció de beneficiaris menors de 18 anys sobre el total, i es multiplica pel numerador (nombre de llars beneficiàries). El denominador és el nombre de llars amb infants per sota del llindar. 
+
+# Setup i dades
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+
+options(scipen = 9999)
+
+```
+
+```{r}
+library(tidyverse)
+library(knitr)
+```
+
+
+```{r}
+# Canviar amb nova edició quan procedeixi
+ff <- readRDS("~/Dropbox/2. Laboral/IERMB/0_Dades/ECV/2019/2021-02-15_RPHD.RDS")
+
+dim(ff)
+```
+
+```{r}
+num_cat <- 11244
+num_esp <- 159482
+
+ppInf_cat <- 18307/35314
+ppInf_esp <- 219213/462508
+
+any_ref <- 2019
+```
+
+
+```{r}
+# Declara referència estàtica
+monop <- "Un adulto con al menos un niño dependiente"
+
+```
+
+```{r}
+# Declara variables recurrents
+ff <- ff %>% 
+  # llars amb menors
+   group_by(HB030) %>% 
+   mutate(menors18 = ifelse(any(RB080 > 2000), T, F)) %>% 
+   ungroup(.) %>% 
+  # calcula llindar IMV
+   mutate(NPER = HX040, 
+          COV_llindar_IVU = 
+             (461.5 * 12) + (138.5 * 12) * (NPER - 1)
+   ) %>% 
+   # aplica correcció llars monoparentals i màxims
+   mutate(COV_llindar_IVU = ifelse(HX060 == monop, 
+                                   COV_llindar_IVU + 1200, COV_llindar_IVU), 
+          COV_llindar_IVU = ifelse(COV_llindar_IVU > 1015.3 * 12, 
+                                   1015.3 * 12, COV_llindar_IVU)) %>% 
+  #  Identifica elegibles
+   mutate(elegibles = ifelse(vhRentaa < COV_llindar_IVU, T, F))
+
+```
+
+# Revisió prèvia
+
+Al compendi de la lara (update) no consta actualització d'assignació d'ofici, però surt que aproximadament una mica més de la meitat dels beneficiaris a catalunya són menors. amb la selecció de població elegible surt això: 
+
+```{r}
+prop.table(questionr::wtd.table(ff$elegibles, 
+                                ff$menors18, 
+                                weights = ff$RB050
+                                ), 
+           1)
+```
+
+
+# Catalunya {.tabset}
+
+## total
+```{r}
+denom22 <- 
+   ff %>%
+   # Filtra catalunya
+   filter(DB040 == "ES51") %>% 
+   # filtra per llars
+   filter(stringr::str_sub(RB030, start = -1) == "1") %>% 
+   count(elegibles, wt = DB090) %>%
+   filter(elegibles == T) %>%
+   pull(n)
+
+```
+
+Amb dades de `r any_ref`, les llars elegibles a Catalunya per transferència IMV entre el total de llars elegibles són `r round(denom22, 2)`. La taxa de cobertura del IMV a Catalunya sobre el total de llars elegibles és: `r num_cat` / `r round(denom22, 2)` = `r num_cat/denom22 * 100` %. 
+
+## ofici
+```{r}
+denom2 <- ff %>% 
+# selecciona catalunya
+   filter(DB040 == "ES51") %>% 
+# filtra menors
+   filter(menors18 == T) %>% 
+  # filtra per llars
+  filter(stringr::str_sub(RB030, start = -1) == "1") %>% 
+  # recompte
+   count(elegibles, wt = DB090) %>% 
+   mutate(tt = sum(n), 
+          pp = n/tt*100) %>% 
+   filter(elegibles == TRUE) %>% 
+   pull(n)
+
+```
+
+
+Amb dades de `r any_ref`, les llars elegibles d'ofici a Catalunya per transferència IMV amb menors són `r round(denom2, 2)`. La taxa de cobertura d'ofici del IMV a Catalunya és: `rnum_cat * ppInf_cat` / `r round(denom2, 2)` = `r num_cat* ppInf_cat/denom2 * 100` % de les llars amb menors i rendes baixes 
+
+
+
+
+## resum
+
+```{r}
+cat_NLBT <- num_cat
+cat_NLBO <- num_cat * ppInf_cat
+cat_NLET <- denom22
+```
+
+```{r}
+tibble::tribble(
+              ~Cobertura,    ~Taxa,
+     "Taxa de cobertura",     (num_cat/denom22)*100,
+     "Cobertura d'ofici",     (cat_NLBO/cat_NLET)*100,
+    "Resta de cobertura",     (cat_NLBT-cat_NLBO)/(cat_NLET)*100
+
+  ) %>% 
+  kable(., caption = "Resum paràmetres Catalunya ")
+
+```
+
+
+# Espanya {.tabset}
+
+## total
+```{r}
+denom33 <- 
+   ff %>%
+   # filtra per llars
+   filter(stringr::str_sub(RB030, start = -1) == "1") %>% 
+   count(elegibles, wt = DB090) %>%
+   filter(elegibles == T) %>%
+   pull(n)
+
+```
+
+Amb dades de `r any_ref`, les llars elegibles a espanya per transferència IMV entre el total de llars elegibles són `r round(denom33, 2)`. La taxa de cobertura del IMV a espanya sobre el total de llars elegibles és: `r num_esp` / `r round(denom33, 2)` = `r num_esp/denom33 * 100` %. 
+
+## ofici
+```{r}
+denom3 <- ff %>% 
+# filtra menors
+   filter(menors18 == T) %>% 
+  # filtra per llars
+  filter(stringr::str_sub(RB030, start = -1) == "1") %>% 
+  # recompte
+   count(elegibles, wt = DB090) %>% 
+   mutate(tt = sum(n), 
+          pp = n/tt*100) %>% 
+   filter(elegibles == TRUE) %>% 
+   pull(n)
+
+```
+
+Amb dades de `r any_ref`, les llars elegibles a Espanya per transferència IMV amb menors són `r round(denom3, 2)`. La taxa de cobertura d'ofici del IMV a Espanya és: `rnum_esp` / `r round(denom3, 2)` = `r num_esp/denom3 * 100` % de les llars amb menors i rendes baixes 
+
+
+## resum
+
+```{r}
+esp_NLBT <- num_esp
+esp_NLBO <- num_esp * ppInf_esp
+esp_NLET <- denom33
+```
+
+```{r}
+tibble::tribble(
+              ~Cobertura,    ~Taxa,
+     "Taxa de cobertura",     (num_esp/denom33)*100,
+     "Cobertura d'ofici",     (esp_NLBO/esp_NLET)*100,
+    "Resta de cobertura",     (esp_NLBT-esp_NLBO)/(esp_NLET)*100
+
+  ) %>% 
+  kable(., caption = "Resum paràmetres Espanya ")
+
+```
