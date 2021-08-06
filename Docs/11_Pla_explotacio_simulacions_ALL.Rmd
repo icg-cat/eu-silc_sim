@@ -1,0 +1,1232 @@
+---
+params:
+  territori: "myterritori"
+title: "`r paste0('Explotació resultats simulació - ', params$territori)`"
+date: "`r format(Sys.time(), '%d %B, %Y - %H:%M')`"
+author: "IERMB"
+output: 
+ prettydoc::html_pretty:
+  theme: architect
+editor_options: 
+  chunk_output_type: console
+---
+
+Tots els resultats d'aquest document fan referència a la simulació amb dades per `r params$territori`. Les variables de rendes contemplen la transferència del IMV per les llars aplicables. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      message = FALSE, 
+                      warning = FALSE, 
+                      dpi = 300)
+```
+
+```{r library, message=FALSE, warning=F, include=F}
+library(tidyverse, warn.conflicts = F, quietly = T)
+library(knitr, warn.conflicts = F, quietly = T)
+library(rlang, warn.conflicts = F, quietly = T)
+library(scales, warn.conflicts = F, quietly = T)
+library(kableExtra, warn.conflicts = F, quietly = T)
+library(ggalluvial)
+```
+
+```{r dades}
+
+param <- readRDS(here::here("_targets", "objects", "parametres"))
+df <- readRDS(here::here("_targets", 
+                         "objects", 
+                         "F4_dd_dashb"))
+
+filt_var <- sym(param$val[param$param == "ambit_var"])
+do <- readRDS(here::here(param$val[param$param == "bsl_data"])) %>%
+   filter({{filt_var}} %in% 
+          eval(
+             parse(
+                text = param$val[param$param == "ambit"])))
+
+
+ruta <- paste0(
+   here::here("Docs/"), 
+   "/11_taules_pla_explt_", 
+   params$territori, 
+   ".xlsx"
+)
+
+fulls <- openxlsx::getSheetNames(ruta)
+taules <- lapply(fulls, function(x){
+   openxlsx::read.xlsx(xlsxFile = ruta, sheet = x)  
+}) %>% 
+   purrr::set_names(fulls)
+
+rm("ruta", "fulls")
+
+
+```
+
+```{r recodes}
+# variable ORIGINAL (no deflactada d'ie_orig)
+df$ie_orig <- do$IE[match(df$ID, do$ID)]
+rm(do)
+
+#pes mostral = pes aixecat * (n/N)
+df$rb050_mos <- df$RB050 * (nrow(df)/sum(df$RB050, na.rm = T))
+df$pb040_mos <- df$PB040 * (nrow(df)/sum(df$PB040, na.rm = T))
+
+df$PIL <- ifelse(df$ID %in% (df$RB010 * 10^8 + df$HB080), T, F) 
+
+mediana <- Hmisc::wtd.quantile(df$COV_IE_IMV, df$RB050, c(.5))
+df$estrats <- factor(dplyr::case_when(
+   df$COV_IE_IMV <= mediana *  .3  ~ "Pobresa extrema (<30% mediana)", 
+   df$COV_IE_IMV <= mediana *  .6  ~ "Pobresa (>30% <60% mediana)", 
+   df$COV_IE_IMV <= mediana *  .75 ~ "Precaris (>60% <75% mediana)", 
+   df$COV_IE_IMV <= mediana * 1.25 ~ "CM baixa (>75% <125% mediana)", 
+   df$COV_IE_IMV <= mediana * 1.66 ~ "CM alta (>125% <166% mediana)", 
+   df$COV_IE_IMV >  mediana * 1.66 ~ "Classe alta (>166% mediana)" 
+ ), 
+levels = c(
+   "Pobresa extrema (<30% mediana)", 
+"Pobresa (>30% <60% mediana)", 
+"Precaris (>60% <75% mediana)", 
+"CM baixa (>75% <125% mediana)", 
+"CM alta (>125% <166% mediana)", 
+"Classe alta (>166% mediana)" 
+))
+
+```
+
+```{r series}
+edicions1 <- c("1985", "1990", "1995","2000", 
+               "2006", "2011", "16-17", 
+              "17-18", "18-19", "sim2020")
+edicions2 <- c("2006", "2011", "16-17", 
+              "17-18", "18-19", "sim2020")
+```
+
+```{r mykable}
+mykable <- function(tab){
+   tab %>% 
+      knitr::kable(., digits = 1, "html") %>% 
+      kable_styling(bootstrap_options =
+                       c("striped", 
+                         "hover", 
+                         "condensed", 
+                         "responsive"), 
+                    full_width = F, 
+                    position = "left")
+      
+}
+```
+
+```{r theme}
+old <- theme_set(theme_minimal())
+
+my_pal <- RColorBrewer::brewer.pal(n = 11, "RdGy")[c(2, 9, 4, 11)] 
+
+```
+
+```{r peces_taula_ID}
+# defineix les peces clau per la taula amb identificadors simulació
+esc    <- param$val[param$param == "UN"]
+iter   <- param$val[param$param == "iteracions"] %>% as.double(.)
+atur   <- readRDS(here::here("_targets", "objects", "F1_TGatur0")) %>% 
+   round(., 3) %>%  as.double(.) * 100
+erto   <- (as.double(param$val[param$param == "Taxa_erto_proj"]) * 100) %>% round(.,1)
+prop   <- readRDS(here::here("_targets", "objects", "F1_TGcob"))  %>% 
+   round(.,3) %>% as.double(.) * 100
+epa    <- param$val[param$param == "epa"]
+infERT <- param$val[param$param == "erto"]
+ambit <- unique(df$ambit_simulacio)
+bsl_dt <- ifelse(ambit %in% c("BCN", "AMB", "ATM"), "EMCV", "ECV")
+titol  <- paste0(ambit, " - ", epa)
+
+```
+
+```{r taula_ID}
+
+tibble::tribble(
+  ~Variable,                       ~Valor, 
+  "Territori",                      ambit, 
+  "Escenari",                       esc,
+  "n",                              as.character(nrow(df)),
+  "Iteracions",                     as.character(iter),
+  "Data simulació",                 format(Sys.time(), '%d/%m/%y'),
+  "Font dades atur",                paste0("EPA ", epa), 
+  "Referència temp. ERTOS",         infERT,
+  "Taxa d'atur projectada",         as.character(atur), 
+  "Proporció atur amb prestació",   as.character(prop), 
+  "Població afectada per ERTO",     as.character(erto), 
+  "Assignació mesos a l'atur",      "probabilística", 
+  "Base dades renda",               bsl_dt
+) %>%
+  kable(., caption = "Referències simulació", digits = 1) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                full_width = F)
+
+```
+
+
+### Taula 1. 
+
+Renda anual neta mitjana per llar, persona i unitat de consum (euros). `r params$territori`, 2016-2017, 2017-2018, 2018-2019 i estimacions 2020. 
+
+
+```{r}
+p111 <- df %>% 
+   filter(PIL) %>% 
+   summarise(RANMllar = Hmisc::wtd.mean(x = COV_hy020_IMV, 
+                                        weights = RB050,
+                                        na.rm = T)) %>% 
+   pull(RANMllar)
+
+p112 <- df %>% 
+   mutate(rper = COV_hy020_IMV/HX040) %>% 
+   summarise(RANMper = Hmisc::wtd.mean(x = rper, 
+                                       weights = RB050, 
+                                       na.rm = T))%>% 
+   pull(RANMper)
+
+p113 <- df %>% 
+   summarise(RANMuc = Hmisc::wtd.mean(x = COV_IE_IMV, 
+                                      weights = RB050, 
+                                      na.rm = T)) %>% 
+   pull(RANMuc)
+
+```
+
+```{r}
+T1 <- taules$Taula1
+T1$sim2020 <- c(p111, p112, p113)
+T1 %>% 
+   mykable(.)
+
+```
+
+
+### Taula 2.  {.tabset .tabset-fade .tabset-pills} 
+#### Decils
+
+Variació relativa en la mitjana dels ingressos equivalents de la població segons decils de renda
+```{r}
+df$COV_deciles_IMV <- IERMB::fes_WQnt(ie  = df$COV_IE_IMV, 
+                               pes = df$RB050, 
+                               ps  = seq(0,1, .1))
+
+df$deciles_orig <- IERMB::fes_WQnt(ie  = df$ie_orig, 
+                               pes = df$RB050, 
+                               ps  = seq(0,1, .1))
+
+```
+
+```{r group_deciles}
+r2 <- df %>% 
+   group_by(COV_deciles_IMV) %>% 
+   summarise(avg = Hmisc::wtd.mean(.data$COV_IE_IMV, 
+                                   weights = .data$RB050, 
+                                   na.rm = T))
+
+r3 <- df %>% 
+   group_by(deciles_orig) %>% 
+   summarise(avg = Hmisc::wtd.mean(.data$COV_IE_IMV, 
+                                   weights = .data$RB050, 
+                                   na.rm = T))
+
+```
+
+```{r completa_T2}
+T2 <- taules$Taula2
+T2$quantils_sim <- r2$avg
+   # c(
+   # r2[[1, 2]], 
+   # r2[[2, 2]], 
+   # r2[[3, 2]], 
+   # r2[[4, 2]], 
+   # r2[[5, 2]], 
+   # r2[[6, 2]], 
+   # r2[[7, 2]], 
+   # r2[[8, 2]], 
+   # r2[[9, 2]], 
+   # r2[[10, 2]]
+   # )
+
+T2$quantils_pre <- r3$avg
+#    c(
+#    r3[[1, 2]],   
+#    r3[[2, 2]],   
+#    r3[[3, 2]],   
+#    r3[[4, 2]],   
+#    r3[[5, 2]],   
+#    r3[[6, 2]],   
+#    r3[[7, 2]],   
+#    r3[[8, 2]],   
+#    r3[[9, 2]],   
+#    r3[[10, 2]] 
+# )
+
+mykable(T2)
+```
+
+```{r comp_variacio}
+T2 <- T2 %>% 
+   select(Decil, 
+          contains("2019"), 
+          contains("quantils"))
+oldnm <- (names(T2))
+
+names(T2) <- LETTERS[1:(ncol(T2))]
+
+T2 <- 
+T2 %>% 
+   mutate_all(as.numeric) %>% 
+   mutate(Variacio1 = round((C-B)/B * 100,1), 
+          Variacio2 = round((D-B)/B * 100,1)
+          )
+
+names(T2) <- c(oldnm, "Nous_decils", "Antics_decils")
+
+mykable(T2)
+
+```
+
+```{r plot_nous}
+T2 %>% 
+   ggplot(., 
+          aes(x = Decil, 
+              y = `Nous_decils`, 
+              fill = `Nous_decils`, 
+              label = `Nous_decils`)) +
+   geom_bar(stat = "identity") + 
+   geom_text(size = 2.5, color = "black", vjust = 1.5) +
+   scale_fill_distiller(palette = "Reds") +
+   theme_minimal() +
+   labs(
+      title = "Variació renda mitjana per decils (nous decils post-simulació)"
+   )
+   
+```
+
+```{r plot_orig}
+T2 %>% 
+   ggplot(., 
+          aes(x = Decil, 
+              y = `Antics_decils`, 
+              fill = `Antics_decils`, 
+              label = `Antics_decils`)) +
+   geom_bar(stat = "identity") + 
+   geom_text(size = 2.5, color = "black", vjust = 1.5) +
+   scale_fill_distiller(palette = "Reds") +
+   theme_minimal() +
+   labs(
+      title = "Variació renda mitjana per decils (decils inicials pre-simulació)"
+   )
+   
+```
+
+
+#### Quintils
+
+Variació relativa en la mitjana dels ingressos equivalents de la població  segons quintils
+
+```{r}
+df$COV_quint_IMV <- IERMB::fes_WQnt(ie  = df$COV_IE_IMV, 
+                               pes = df$RB050, 
+                               ps  = seq(0,1, .2))
+
+df$quint_orig <- IERMB::fes_WQnt(ie  = df$ie_orig, 
+                               pes = df$RB050, 
+                               ps  = seq(0,1, .2))
+
+```
+
+```{r group_quint}
+
+q0 <- df %>% 
+   group_by(quint_orig) %>% 
+   summarise(qt_2019 = Hmisc::wtd.mean(.data$ie_orig, 
+                                   weights = .data$RB050, 
+                                   na.rm = T))
+q2 <- df %>% 
+   group_by(COV_quint_IMV) %>% 
+   summarise(qt_sim = Hmisc::wtd.mean(.data$COV_IE_IMV, 
+                                   weights = .data$RB050, 
+                                   na.rm = T))
+
+q3 <- df %>% 
+   group_by(quint_orig) %>% 
+   summarise(qt_pre = Hmisc::wtd.mean(.data$COV_IE_IMV, 
+                                   weights = .data$RB050, 
+                                   na.rm = T))
+
+```
+
+```{r}
+q0$qt_sim <- q2$qt_sim
+q0$qt_pre <- q3$qt_pre
+
+
+oldnm <- c("Quintil", "2019", "quantils_sim", "quantils_pre")
+
+names(q0) <- LETTERS[1:(ncol(q0))]
+
+q0 <- 
+q0 %>% 
+   mutate_all(as.numeric) %>% 
+   mutate(Variacio1 = round((C-B)/B * 100,1), 
+          Variacio2 = round((D-B)/B * 100,1)
+          )
+
+names(q0) <- c(oldnm, "Nous_quint", "Antics_quint")
+
+mykable(q0)
+
+```
+
+```{r}
+q0 %>% 
+   ggplot(., 
+          aes(x = Quintil, 
+              y = `Nous_quint`, 
+              fill = `Nous_quint`, 
+              label = `Nous_quint`)) +
+   geom_bar(stat = "identity") + 
+   geom_text(size = 2.5, color = "black", vjust = 1.5) +
+   scale_fill_distiller(palette = "Reds") +
+   theme_minimal() +
+   labs(
+      title = "Variació renda mitjana per quintils (nous quintils post-simulació)"
+   )
+   
+```
+
+```{r}
+q0 %>% 
+   ggplot(., 
+          aes(x = Quintil, 
+              y = `Antics_quint`, 
+              fill = `Antics_quint`, 
+              label = `Antics_quint`)) +
+   geom_bar(stat = "identity") + 
+   geom_text(size = 2.5, color = "black", vjust = 1.5) +
+   scale_fill_distiller(palette = "Reds") +
+   theme_minimal() +
+   labs(
+      title = "Variació renda mitjana per quintils (quintils inicials pre-simulació)"
+   )
+   
+```
+
+```{r}
+
+da <- df %>% 
+   select(quint_orig, COV_quint_IMV, RB050) %>% 
+   mutate(roman = ifelse(quint_orig == COV_quint_IMV, 
+                         "Igual", "Canvi")) %>% 
+   group_by(quint_orig, roman) %>% 
+   count(COV_quint_IMV, wt = RB050)
+
+mykable(da)
+
+ggplot(da,
+       aes(y = n, 
+           axis1 = quint_orig, 
+           axis2 = COV_quint_IMV)) +
+  geom_alluvium(aes(fill = roman), 
+                width = 1/12) +
+  geom_stratum(alpha = .2, 
+               width = 1/12) +
+  geom_text(stat = "stratum",
+             aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Inicial", "Simulat"),
+                   expand = c(.05, .05)) +
+  scale_y_continuous(labels = scales::label_comma(
+      big.mark = ".",
+      decimal.mark = ","
+  )) +
+  scale_fill_brewer(type = "qual", 
+                    palette = "Set1") +
+  labs(
+     title = "Mobilitat entre quintils de renda", 
+     subtitle = titol,
+     x = NULL, 
+     y = NULL, 
+     fill = NULL
+  )
+
+```
+
+#### 3 Grups
+
+Variació relativa en la mitjana dels ingressos equivalents de la població  segons decils de renda agrupats
+
+```{r}
+
+df$COV_deciles_IMV3 <- df$COV_deciles_IMV
+levels(df$COV_deciles_IMV3) <- c(rep("Baixos", 3), 
+                                 rep("Intermedis", 4), 
+                                 rep("Alts", 3))
+
+df$deciles_orig3 <- df$deciles_orig
+levels(df$deciles_orig3) <- c(rep("Baixos", 3), 
+                                 rep("Intermedis", 4), 
+                                 rep("Alts", 3))
+
+r22 <- df %>% 
+   group_by(COV_deciles_IMV3) %>% 
+   summarise(avg = Hmisc::wtd.mean(.data$COV_IE_IMV, 
+                                   weights = .data$RB050, 
+                                   na.rm = T))
+
+r33 <- df %>% 
+   group_by(deciles_orig3) %>% 
+   summarise(avg = Hmisc::wtd.mean(.data$COV_IE_IMV, 
+                                   weights = .data$RB050, 
+                                   na.rm = T))
+
+```
+
+```{r}
+t23 <- df %>% 
+   group_by(deciles_orig3) %>% 
+   summarise(`2019` = Hmisc::wtd.mean(.data$ie_orig, 
+                                   weights = .data$RB050, 
+                                   na.rm = T)) %>% 
+   rename(Decil = deciles_orig3)
+```
+
+```{r}
+t23$quantils_sim <- r22$avg
+   # c(
+   # r22[[1, 2]], 
+   # r22[[2, 2]], 
+   # r22[[3, 2]]
+   # )
+
+t23$quantils_pre <- r33$avg
+#    c(
+#    r33[[1, 2]],   
+#    r33[[2, 2]],   
+#    r33[[3, 2]] 
+# )
+
+oldnm <- (names(t23))
+
+names(t23) <- LETTERS[1:(ncol(t23))]
+
+t23 <- 
+t23 %>% 
+   mutate_all(as.numeric) %>% 
+   mutate(Variacio1 = round((C-B)/B * 100,1), 
+          Variacio2 = round((D-B)/B * 100,1)
+          )
+
+names(t23) <- c(oldnm, "Nous_decils", "Antics_decils")
+
+mykable(t23)
+
+```
+
+```{r}
+t23 %>% 
+   ggplot(., 
+          aes(x = Decil, 
+              y = `Nous_decils`, 
+              fill = `Nous_decils`, 
+              label = `Nous_decils`)) +
+   geom_bar(stat = "identity") + 
+   geom_text(size = 2.5, color = "black", vjust = 1.5) +
+   scale_fill_distiller(palette = "Reds") +
+   theme_minimal() +
+   labs(
+      title = "Variació renda mitjana per decils (nous decils post-simulació)"
+   )
+   
+```
+
+```{r}
+t23 %>% 
+   ggplot(., 
+          aes(x = Decil, 
+              y = `Antics_decils`, 
+              fill = `Antics_decils`, 
+              label = `Antics_decils`)) +
+   geom_bar(stat = "identity") + 
+   geom_text(size = 2.5, color = "black", vjust = 1.5) +
+   scale_fill_distiller(palette = "Reds") +
+   theme_minimal() +
+   labs(
+      title = "Variació renda mitjana per decils (decils inicials pre-simulació)"
+   )
+   
+```
+
+### Taula 3.1. 
+
+Índex de Gini 
+
+```{r}
+g21 <- df %>% 
+   summarise(laeken::gini(inc = COV_IE_Gini_IMV, 
+                          weights = RB050)$value) %>% 
+   .[1,1] %>% 
+   pull(.) %>% round(., 1)
+```
+
+
+```{r}
+
+anys <- bind_cols(
+   num = c(1985, 1990, 1995, 2000, 2006, 
+           2011, 2016, 2017, 2018, 2020.01), 
+   lab = edicions1
+)
+
+T31 <- taules$Taula31
+
+T31 <- rbind(T31, 
+                 c(Any = "sim2020", 
+                   Valor = g21, 
+                   `Sèrie` = "Sim - EMCV")) %>% 
+   filter(complete.cases(.))
+mykable(T31)
+```
+
+```{r eval=FALSE, include=FALSE}
+s1 <- T31$Valor[T31$Any == 2006]%>% as.numeric(as.character(.))
+s2 <- T31$Valor[T31$Any == 2011]%>% as.numeric(as.character(.))
+s3 <- T31$Valor[T31$Any == "16-17"]%>% as.numeric(as.character(.))
+s4 <- T31$Valor[T31$Any == "18-19"]%>% as.numeric(as.character(.))
+
+T31 %>%
+   mutate(anyN = anys$num[match(.$Any, anys$lab)],
+          Valor = as.numeric(Valor)) %>%
+   ggplot(.,
+          aes(x = anyN,
+              y = Valor,
+              color = `Sèrie`)) +
+   geom_line() +
+   geom_segment(aes(x = 2006,
+                    y = s1,
+                    xend = 2011,
+                    yend = s2),
+                linetype = "dashed",
+                color = "gray50") +
+   geom_segment(aes(x = 2011,
+                    y = s2,
+                    xend = 2016,
+                    yend = s3),
+                linetype = "dashed",
+                color = "gray50") +
+   geom_segment(aes(x = 2019,
+                    y = s4,
+                    xend = 2020,
+                    yend = g21),
+                linetype = "dashed",
+                color = "gray50") +
+   geom_point(size = 3) +
+   scale_color_brewer(palette = "RdGy") +
+   ylim(0, NA) +
+   scale_x_continuous(breaks = anys$num,
+                      labels = c(anys$lab)) +
+   theme(axis.text.x  = element_text(angle = 30,
+                                     vjust = 0.7,
+                                     hjust = .9),
+         panel.grid.minor = element_blank(),
+         legend.position = "bottom") +
+   labs(
+      x = NULL,
+      y = "Gini",
+      color = "Sèrie"
+   )
+
+```
+
+
+### Taula 3.2. 
+
+Raons de desigualtat entre decils de renda
+
+```{r}
+source(here::here("R", "181105_Quantile_income_ratio_P.R"))
+# source("~/Dropbox/R/01_Repo_codi_propi/2. Analitza dades/181105_Quantile_income_ratio_P.R")
+
+p21 <- 
+df %>% 
+   summarise(
+      `P50/10` = cal_QuantRat(Qnume = .5,
+                              Qdenom = .1,
+                              nom_dades = .,
+                              IV = "COV_IE_Gini_IMV"),
+      `P80/20` = cal_QuantRat(Qnume = .8,
+                              Qdenom = .2,
+                              nom_dades = .,
+                              IV = "COV_IE_Gini_IMV"),
+      `S80/20` = laeken::qsr(inc = COV_IE_Gini_IMV, 
+                             weights = RB050, 
+                             na.rm = T)$value,
+      `P90/50` = cal_QuantRat(Qnume = .9,
+                              Qdenom = .5,
+                              nom_dades = .,
+                              IV = "COV_IE_Gini_IMV"),
+      `P90/10` = cal_QuantRat(Qnume = .9,
+                              Qdenom = .1,
+                              nom_dades = .,
+                              IV = "COV_IE_Gini_IMV")
+   )
+
+mykable(p21)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+do %>% 
+   summarise(
+      `P50/10` = cal_QuantRat(Qnume = .5,
+                              Qdenom = .1,
+                              nom_dades = .,
+                              IV = "COV_IE_Gini_IMV"),
+      `P90/50` = cal_QuantRat(Qnume = .9,
+                              Qdenom = .5,
+                              nom_dades = .,
+                              IV = "COV_IE_Gini_IMV")
+   )
+```
+
+```{r}
+
+T32 <- taules$Taula32
+T32$sim2020 <- c(pull(p21[1,4]), 
+                 pull(p21[1,1]))
+
+T32 %>% 
+   mykable(.)
+
+
+```
+
+```{r}
+T32 %>% 
+   gather("Any", "Val", -Raons) %>% 
+   mutate(Any = factor(Any, 
+                       levels = edicions1
+                       )) %>% 
+   ggplot(., 
+          aes(x = Any, 
+              y = Val, 
+              group = Raons, 
+              color = Raons)) + 
+   geom_point() + 
+   geom_line() + 
+   scale_colour_manual(values = my_pal) +
+   ylim(0, NA) +
+   labs(
+      y = "Raó"
+   ) +
+   theme_minimal()
+
+```
+
+
+### Taula 4.1 
+
+Taxes de risc de pobresa segons intensitat
+
+```{r}
+
+fes_pp <- function(x, tt){
+   # stop()
+   round((x/tt * 100), 2)
+}
+
+g31 <- 
+df %>% 
+   summarise(
+      p60  = sum(RB050[COV_TRP_IMV60     == "Pobre"]), 
+      p40  = sum(RB050[COV_TRP_IMV40     == "Pobre"]), 
+      p30  = sum(RB050[COV_TRP_IMV30     == "Pobre"]),
+      pa60 = sum(RB050[COV_TRP_ANC_IMV60 == "Pobre"]), 
+      pa40 = sum(RB050[COV_TRP_ANC_IMV40 == "Pobre"]), 
+      pa30 = sum(RB050[COV_TRP_ANC_IMV30 == "Pobre"]),
+      tt  = sum(RB050)
+   ) %>% 
+   mutate(across(everything(), ~ fes_pp(x = .x, tt)))
+   
+```
+
+```{r}
+
+T4 <- taules$Taula41
+T4$sim2020 <- c(g31[[1,1]], 
+                g31[[1,2]], 
+                g31[[1,3]])
+
+T4 %>% 
+   mykable(.)
+
+```
+
+```{r}
+anys <- bind_cols(
+   num = c(2011, 2016, 2017, 2018, 2020.01), 
+   lab = edicions2[2:6]
+)
+
+T4 %>% 
+   mutate(Tip = rep("Inicial", 3)) %>% 
+   gather(., "Any", "Val", -c(indicador, Tip)) %>% 
+   bind_rows(., 
+             bind_cols(
+   indicador = c("moderada (60%)", 
+                 "severa (40%)", 
+                 "extrema (30%)"), 
+   Any       = rep("sim2020", 3), 
+   Val       = unlist(c(g31[4:6])), 
+   Tip       = rep("Ancorada", 3))
+   ) %>% 
+   mutate(anyN = anys$num[match(.$Any, anys$lab)]) %>% 
+   ggplot(., 
+          aes(x = anyN, 
+              y = Val, 
+              color = Tip, 
+              group = indicador)) +
+   geom_line(size = 0.4, color = "gray85") + 
+   geom_point(size = 2.5) + 
+   scale_x_continuous(breaks = anys$num, 
+                      labels = c(anys$lab)) +
+   scale_colour_manual(values = my_pal) +
+   ylim(0, NA) + 
+   theme_minimal() + 
+   theme(panel.grid.minor = element_blank(), 
+         axis.text.x  = element_text(angle = 30, 
+                                     vjust = 0.7, 
+                                     hjust = .9)
+         ) +
+   labs(
+      x = NULL, 
+      y = "(%)", 
+      color = NULL
+   )
+
+```
+
+### Taula 4.2. 
+
+Intensitat de risc de pobresa
+
+> % distance to poverty threshold:  The indicator is calculated as the distance between the median equivalised total net income of persons below the at-risk-of-poverty threshold and the at-risk-of-poverty threshold itself, expressed as a percentage of the at-risk-of-poverty threshold. This threshold is set at 60 % of the national median equivalised disposable income of all people in a country and not for the EU as a whole.
+
+
+```{r}
+
+llindar <- Hmisc::wtd.quantile(x       = df$COV_IE_IMV, 
+                               weights = df$RB050, 
+                               probs   = c(.5)) * .6
+mediana_p <- df %>% 
+   filter(COV_TRP_IMV60 == "Pobre") %>% 
+   summarise(med_p = Hmisc::wtd.quantile(x       = COV_IE_IMV, 
+                                         weights = RB050, 
+                                         probs   = c(.5)))
+
+p31 <- round((llindar - mediana_p) / llindar, 3)
+   
+```
+
+```{r}
+T42 <- taules$Taula42
+T42$sim2020 <- c(p31, llindar, mediana_p)
+
+T42 %>% 
+      knitr::kable(., digits = 3, "html") %>% 
+      kable_styling(bootstrap_options =
+                       c("striped", 
+                         "hover", 
+                         "condensed", 
+                         "responsive"), 
+                    full_width = F, 
+                    position = "left")
+
+```
+
+### Taula 4.3 
+
+Pobresa ancorada (2018-2019) segons diferent intensitat. Llindar 2018-2019 
+
+```{r}
+g41 <- 
+df %>% 
+   summarise(
+      p60 = sum(RB050[COV_TRP_ANC_IMV60 == "Pobre"]), 
+      p40 = sum(RB050[COV_TRP_ANC_IMV40 == "Pobre"]), 
+      p30 = sum(RB050[COV_TRP_ANC_IMV30 == "Pobre"]),
+      tt  = sum(RB050)
+   ) %>% 
+   mutate(across(everything(), ~ fes_pp(x = .x, tt)))
+```
+
+
+```{r}
+T43 <- taules$Taula43
+T43$sim2020 <- c(g41[[1,1]], g41[[1,2]], g41[[1,3]])
+
+ 
+T43 %>% 
+   mykable(.)
+
+```
+
+### Taula 5. 
+
+Canvis a la pobresa estimada (60% mediana) segons característiques sociodemogràfiques
+
+```{r}
+
+if("PB210_R1" %in% names(df)){
+   df$PB210 <- df$PB210_R1
+}
+
+mvars <- c("RB090", "RB080_R8", "PB210", 
+           "HX060_R1", "ESEC6")
+mpes <- c("RB050", "RB050", "PB040",
+          "RB050", "PB040")
+mpesmos <- c("rb050_mos", "rb050_mos", "pb040_mos",
+          "rb050_mos", "pb040_mos")
+
+g51A <- 
+purrr::map2(mvars, mpes, function(x, pes){
+   X <- sym(x)
+   ps <- sym(pes)
+ 
+   df %>%
+    select(COV_TRP_IMV60, all_of(x), pes) %>% 
+    filter(complete.cases(.)) %>% 
+      group_by({{X}}) %>%
+      count(COV_TRP_IMV60, wt = {{ps}}) %>%
+      mutate(tt = sum(n),
+             pp = n/tt*100) %>%
+      filter(COV_TRP_IMV60 == "Pobre") %>%
+      pull(pp)
+})
+
+
+g51B <- 
+purrr::map2(mvars, mpes, function(x, pes){
+   # stop()
+   X <- sym(x)
+   ps <- sym(pes)
+ 
+   df %>%
+    select(COV_TRP_ANC_IMV60, all_of(x), pes) %>% 
+    filter(complete.cases(.)) %>% 
+      group_by({{X}}) %>%
+      count(COV_TRP_ANC_IMV60, wt = {{ps}}) %>%
+      mutate(pp = n/sum(n)*100) %>%
+      filter(COV_TRP_ANC_IMV60 == "Pobre") %>%
+      pull(pp)
+})
+
+NyT <- 
+purrr::map2(mvars,mpesmos, function(x, pes){
+   X <- sym(x)
+   ps <- sym(pes)
+
+   df %>%
+    select(COV_TRP_ANC_IMV60, x, pes) %>% 
+    filter(complete.cases(.)) %>% 
+      group_by({{X}}) %>%
+      count(COV_TRP_ANC_IMV60, wt = {{ps}}) %>%
+      mutate(tt = sum(n)) %>%
+      filter(COV_TRP_ANC_IMV60 == "Pobre") %>% 
+      rename(cats = {{X}}) %>% 
+      mutate(cats = as.character(cats))
+}) %>% do.call("rbind", .)
+
+
+
+```
+
+
+```{r}
+T5 <- taules$Taula5
+
+T5$sim2020 <- c(
+g51A[[1]][1], g51A[[1]][2], g51A[[2]][1], 
+g51A[[2]][2], g51A[[2]][3], g51A[[2]][4], 
+g51A[[3]][1], g51A[[3]][2], g51A[[4]][1], 
+g51A[[4]][2], g51A[[4]][3], g51A[[4]][4], 
+g51A[[5]][1], g51A[[5]][2], g51A[[5]][3], 
+g51A[[5]][4], g51A[[5]][5], g51A[[5]][6])
+
+T5$ANC2020 <- c(
+g51B[[1]][1], g51B[[1]][2], g51B[[2]][1], 
+g51B[[2]][2], g51B[[2]][3], g51B[[2]][4], 
+g51B[[3]][1], g51B[[3]][2], g51B[[4]][1], 
+g51B[[4]][2], g51B[[4]][3], g51B[[4]][4], 
+g51B[[5]][1], g51B[[5]][2], g51B[[5]][3], 
+g51B[[5]][4], g51B[[5]][5], g51B[[5]][6])
+
+dinou <- grep("19", names(T5))
+mlist <- list(
+   nums = NyT$n,
+   denoms = NyT$tt,
+   props = (T5[[dinou]]/100)
+)
+
+
+T5$ztest <- 
+   purrr::pmap(.l = mlist, .f = function(nums, denoms, props){
+   prop.test(
+      x = nums, 
+      n = denoms, 
+      p = props
+   )$statistic %>% 
+      sqrt(.) %>% round(., 2)
+}) %>% unlist(.)
+
+
+T5 %>% mykable(.)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+alld <- levels(df$ESEC6)[6]
+aa <- sum(df$ESEC6 == alld & df$RB080G > 15, na.rm = T)
+bb <- nrow(df)
+cc <- sum(df$RB080G > 15)
+ee <- sum(df$ESEC6 == alld & 
+             df$RB080G > 15 & 
+             df$TRP60 == "Pobre", na.rm = T)
+ff <- sum(df$ESEC6 == alld & 
+             df$RB080G > 15 & 
+             df$COV_TRP_ANC_IMV60 == "Pobre", na.rm = T)
+
+AA <- sum(df$PB040[df$ESEC6 == alld & df$RB080G > 15], na.rm = T)
+BB <- sum(df$RB050)
+CC <- sum(df$PB040, na.rm = T)
+EE <- sum(df$PB040[df$ESEC6 == alld & 
+                      df$RB080G > 15  & 
+                      df$TRP60 == "Pobre"], na.rm = T)
+FF <- sum(df$PB040[df$ESEC6 == alld & 
+                      df$RB080G > 15 & 
+                      df$COV_TRP_ANC_IMV60 == "Pobre"], na.rm = T)
+
+med <- Hmisc::wtd.quantile(x = df$ie_orig, weights = df$RB050, probs = c(.5))
+meds <- Hmisc::wtd.quantile(x = df$COV_IE_IMV, weights = df$RB050, probs = c(.5))
+
+Llindars de risc de pobresa: 
+
+* 2019: `r med* 0.6`
+* sim: `r meds* 0.6`
+
+# D'una n inicial a la mostra de `r bb` observacions, i `r cc` adultes, el nombre d'observacions que s'identifiquen originalment com a ALLD/NTM (16+ anys) és de `r aa`. Entre aquestes, `r ee` eren pobres abans de la simulació (llindar pel territori de referència). Després de la simulació (llindar ancorat, amb IMV), `r ff` són pobres. 
+# 
+# Fent servir els valors aixecats, d'una n inicial a la mostra de `r BB` observacions, i `r CC` adultes, el nombre d'observacions que s'identifiquen originalment com a ALLD/NTM (16+ anys) és de `r AA`. Entre aquestes, `r EE` eren pobres abans de la simulació (`r EE/AA`llindar pel territori de referència). Després de la simulació (llindar ancorat, amb IMV), `r FF` són pobres `r FF/AA`.
+
+
+
+```
+
+
+```{r}
+T5 %>% 
+   select(var, categories, 
+          contains("19"), 
+          contains("2020")) %>% 
+   gather("Any", "Val", -c(var, categories)) %>% 
+   ggplot(., 
+          aes(y = categories, 
+              x = Val, 
+              color = Any, 
+              group = categories)) +
+   geom_line(color = "gray", 
+                 linetype = "dashed", 
+                 size = .3) + 
+   geom_point() +
+   scale_colour_manual(values = my_pal) +
+   theme_minimal() + 
+   facet_grid(var~., drop = T, scales = "free_y") + 
+   labs(
+      x = NULL, 
+      y = NULL, 
+      color = NULL
+   )
+
+```
+
+
+
+### Taula 6. 
+
+Proporció mitjana de la renda anual (neta) de les llars que es destina a les despeses fixes de l'habitatge (sense amortització), segons règim de tinença de l'habitatge.
+
+```{r externalitzat_funcions}
+df$COV_HCB <- (((df$HH070 * 12) - df$HY070N)/(df$COV_hy020_IMV - df$HY070N)) * 100
+
+# Correccions necessàries
+df$COV_HCB[((df$HH070 * 12) - df$HY070N) < 0] <- 0 # Si les despeses llar menys les transferències és menor a 0 (les transferències cobreixen més que les despeses), la sobrecàrrega és 0
+df$COV_HCB[(df$COV_hy020_IMV - df$HY070N) <= 0] <- 100 #Si els ingressos menys les transferències és menor que 0 (tots els ingressos són les transferències per llar), la sobrecàrrega és 100
+df$COV_HCB[(df$COV_hy020_IMV - df$HY070N) < ((df$HH070*12) - df$HY070N)] <- 100 #si ingressos menys transferències és menor a despeses menys transferències, la sobrecàrrega és 100
+
+df$COV_Taxa_HCB <- as.factor(
+   cut(df$COV_HCB, 
+   breaks = c(0, 40, 100), 
+   include.lowest = T, 
+   right = T, 
+   labels = c("Sense sobrecàrrega", 
+              "Amb sobrecàrrega")))
+
+df$COV_Taxa_HCB60 <- as.factor(
+   cut(df$COV_HCB, 
+   breaks = c(0, 60, 100), 
+   include.lowest = T, 
+   right = T, 
+   labels = c("Sense sobrecàrrega", 
+              "Amb sobrecàrrega")))
+   
+```
+
+```{r}
+p51 <- df %>% 
+   group_by(RTL3) %>% 
+   summarise(mitjana = 
+                Hmisc::wtd.mean(COV_HCB, 
+                              weights = RB050)
+             ) %>% 
+   pull(mitjana)
+
+p52 <- df %>% 
+   summarise(mitjana = 
+                Hmisc::wtd.mean(COV_HCB, 
+                              weights = RB050)
+             ) %>% 
+   pull(mitjana)
+
+```
+
+```{r originals_6, eval=FALSE, include=FALSE}
+do %>% 
+   group_by(RTL3) %>% 
+   summarise(mitjana = 
+                Hmisc::wtd.mean(HCB, 
+                              weights = RB050)
+             ) 
+
+do %>% 
+   summarise(mitjana = 
+                Hmisc::wtd.mean(HCB, 
+                              weights = RB050)
+             ) 
+```
+
+```{r}
+T6 <- taules$Taula6
+T6$sim2020 <- c(p51[1], p51[2],
+                p51[3], p51[4], 
+                p52)
+T6 %>% 
+   mykable(.)
+
+```
+
+
+### Taula 7. 
+
+Taxa de sobrecàrrega despeses habitatge (sense amortització) amb diferents llindars
+
+```{r}
+p61 <- 
+df %>% 
+   group_by(RTL3) %>% 
+   count(COV_Taxa_HCB, wt = RB050) %>% 
+   mutate(tt = sum(n), 
+          pp = n/tt * 100) %>% 
+   filter(COV_Taxa_HCB == "Amb sobrecàrrega") %>% 
+   pull(pp) %>% 
+   round(., 1) 
+
+p62 <- 
+df %>% 
+   group_by(RTL3) %>% 
+   count(COV_Taxa_HCB60, wt = RB050) %>% 
+   mutate(tt = sum(n), 
+          pp = n/tt * 100) %>% 
+   filter(COV_Taxa_HCB60 == "Amb sobrecàrrega") %>% 
+   pull(pp) %>% 
+   round(., 1) 
+
+
+```
+
+```{r}
+T7 <- taules$Taula7
+T7$sim2020 <- c(
+   p61[4], # altres 40
+   p62[4], # altres 60
+   p61[3], # lloguer 40
+   p62[3], 
+   p61[1], # pagada 40
+   p62[1], 
+   p61[2], # pagaments 40
+   p62[2]
+)
+
+T7 <- T7 %>% 
+   relocate(perc) %>% 
+   mutate(RTL = factor(RTL, levels = c("pagada", "pagaments", "lloguer", "altres"))) %>% 
+   arrange(perc, RTL)
+   
+T7 %>% 
+   mykable(.) %>% 
+   collapse_rows(columns = 1, valign = "middle")
+
+
+```
+
+```{r}
+T7 %>% 
+   gather("serie", "Val", -c(RTL, perc)) %>% 
+   mutate(Val = as.numeric(Val)) %>% 
+   ggplot(., 
+          aes(x = serie, 
+              y = Val, 
+              group = RTL, 
+              color = RTL)) + 
+   geom_point() +
+   geom_line() +
+   facet_wrap(.~perc) + 
+   theme_minimal() + 
+   scale_color_brewer(palette = "RdGy") +
+   labs(
+      y = "%", 
+      x = "Edició", 
+      color = "Règim de \ntinença"
+   )
+   
+```
+
+
+### Taula 8. 
+
+Taxa de risc de pobresa (60% mediana) abans i després del IMV
+
+El llindar de referència fa servir les dades després de la injecció del IMV. 
+
+
+```{r}
+df %>% 
+   select(contains("COV_TRP"), RB050) %>% 
+      summarise(
+      trp60_abans   = sum(RB050[COV_TRP60 == "Pobre"]), 
+      trp40_abans   = sum(RB050[COV_TRP40 == "Pobre"]), 
+      trp30_abans   = sum(RB050[COV_TRP30 == "Pobre"]),
+      trp60_despres = sum(RB050[COV_TRP_IMV60 == "Pobre"]), 
+      trp40_despres = sum(RB050[COV_TRP_IMV40 == "Pobre"]), 
+      trp30_despres = sum(RB050[COV_TRP_IMV30 == "Pobre"]),
+      tt  = sum(RB050)
+   ) %>% 
+   mutate(across(everything(), ~ fes_pp(x = .x, tt))) %>% 
+   gather("TRP", "Valor") %>% 
+   filter(TRP != "tt") %>% 
+   separate(TRP, into = c("TRP", "quan")) %>% 
+   spread(., quan, Valor) %>% 
+   mykable(.)
+
+   
+```
+

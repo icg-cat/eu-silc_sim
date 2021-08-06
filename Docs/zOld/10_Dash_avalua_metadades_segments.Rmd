@@ -1,0 +1,1036 @@
+---
+title: "Dashboard resultats simulació"
+date: "`r format(Sys.time(), '%d %B, %Y - %H:%M')`"
+output: 
+  flexdashboard::flex_dashboard:
+    df_print: paged
+    orientation: columns
+    vertical_layout: fill
+editor_options: 
+  chunk_output_type: console
+params:
+   carpeta: "Outputs/"
+   iter: "10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      include = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE)
+```
+
+```{r library, include=FALSE, message=FALSE, warning=FALSE}
+library(flexdashboard, warn.conflicts = F, quietly = T)
+library(tidyverse, warn.conflicts = F, quietly = T)
+library(knitr, warn.conflicts = F, quietly = T)
+library(kableExtra, warn.conflicts = F, quietly = T)
+library(patchwork, warn.conflicts = F, quietly = T)
+library(targets)
+```
+
+```{r a}
+ruta1 <- paste0(here::here(), "/", params$carpeta, "/", "objects")
+
+dt <- readRDS(paste0(ruta1, "/",  "F4_dd_dashb"))
+md <- readRDS(paste0(ruta1, "/",  "F3_resmat"))
+param <- readRDS(paste0(ruta1, "/",  "parametres"))
+
+```
+
+```{r set_theme}
+theme_set(theme_bw())
+```
+
+```{r peces_taula_ID}
+# defineix les peces clau per la taula amb identificadors simulació
+esc    <- param$val[param$param == "UN"]
+iter   <- param$val[param$param == "iteracions"] %>% as.double(.)
+atur   <- readRDS(paste0(ruta1, "/",  "F1_TGatur")) %>% 
+   round(., 3) %>%  as.double(.) * 100
+erto   <- (as.double(param$val[param$param == "Taxa_erto_proj"]) * 100) %>% round(.,1)
+prop   <- readRDS(paste0(ruta1, "/",  "F1_TGcob"))  %>% 
+   round(.,3) %>% as.double(.) * 100
+epa    <- param$val[param$param == "epa"]
+infERT <- param$val[param$param == "erto"]
+ambit <- unique(dt$ambit_simulacio)
+bsl_dt <- ifelse(ambit %in% c("BCN", "AMB", "ATM"), "EMCV", "ECV")
+titol  <- paste0(ambit, " - ", epa)
+
+```
+
+
+<script>
+document.querySelector(".navbar-header > span.navbar-brand").innerHTML = "`r titol`";
+</script> 
+
+Sintètics
+=======================================================================
+
+```{r taula_ID}
+
+tibble::tribble(
+  ~Variable,                       ~Valor, 
+  "Territori",                      ambit, 
+  "Escenari",                       esc,
+  "n",                              as.character(nrow(dt)),
+  "Iteracions",                     as.character(iter),
+  "Data simulació",                 format(Sys.time(), '%d/%m/%y'),
+  "Font dades atur",                paste0("EPA ", epa), 
+  "Referència temp. ERTOS",         infERT,
+  "Taxa d'atur projectada",         as.character(atur), 
+  "Proporció atur amb prestació",   as.character(prop), 
+  "Població afectada per ERTO",     as.character(erto), 
+  "Assignació mesos a l'atur",      "probabilística", 
+  "Base dades renda",               bsl_dt
+) %>%
+  kable(., caption = "Referències simulació", digits = 1) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                full_width = F)
+
+```
+
+```{r b}
+# funció per extreure resultats sintètics de la simulació
+extreu_trp <- function(dd, var){
+  # stop()
+  vv <- enquo(var)
+  dd %>% 
+  count({{vv}}, wt = RB050) %>% 
+    mutate(tt = sum(n), 
+           pp = round(n/tt * 100, 2)) %>% 
+    filter({{vv}} == "Pobre") %>% 
+    pull(pp)
+}
+
+r1 <- Hmisc::wtd.mean(dt$HY020[dt$PIL], 
+                      weights = dt$RB050[dt$PIL], 
+                      na.rm = T)
+r2 <- mean(md$Renda_mitjana_llars_IMV, 
+                      na.rm = T)
+r3 <- Hmisc::wtd.mean(dt$COV_hy020_IMV[dt$PIL], 
+                      weights = dt$RB050[dt$PIL], 
+                      na.rm = T)
+
+obs <- dt %>% 
+  summarise(
+    mediana_IE    = Hmisc::wtd.quantile(IE, weights = RB050, 
+                                        probs = c(.5)), 
+    Gini          = laeken::gini(IE_gini, weights = RB050, 
+                      na.rm = T)$value,
+    TRP60_anc     = extreu_trp(., TRP60),
+    TRP30_anc     = extreu_trp(., TRP30)
+  )
+  
+  
+est1 <- md %>% 
+  summarise(
+    mediana_IE    = mean(Mediana_IE, 
+                      na.rm = T), 
+    Gini          = mean(Gini_IMV, 
+                      na.rm = T), 
+    TRP60_anc     = mean(COV_TRP_ANC_IMV60, 
+                      na.rm = T), 
+    TRP30_anc     = mean(COV_TRP_ANC_IMV30, 
+                      na.rm = T)  
+    )
+
+est2 <- dt %>% 
+  summarise(
+    mediana_IE    = Hmisc::wtd.quantile(COV_IE_IMV, weights = RB050, 
+                                        probs = c(.5), 
+                      na.rm = T), 
+    Gini          = laeken::gini(COV_IE_Gini_IMV, 
+                                 weights = RB050, 
+                                 na.rm = T)$value,
+    TRP60_anc     = extreu_trp(., COV_TRP_ANC_IMV60),
+    TRP30_anc     = extreu_trp(., COV_TRP_ANC_IMV30)
+  )
+
+bind_cols(
+  Font = c("Observat", 
+           "Simulació - metadades", 
+           "Simulació - microdades"),
+  Renda_llars = c(r1, r2, r3), 
+  bind_rows(
+    obs, 
+    est1, 
+    est2
+  )
+) %>% 
+  kable(., caption = "Resultats sintètics simulació COVID19 (Amb IMV, Llindar variable)", digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+<br>
+<br>
+<br>
+
+```{r c}
+
+a <- 34757
+b <- 33251
+d <- min(md$Renda_mitjana_llars_IMV)
+e <- max(md$Renda_mitjana_llars_IMV)
+g <- unname(quantile(md$Renda_mitjana_llars_IMV, probs = c(.05)))
+h <- unname(quantile(md$Renda_mitjana_llars_IMV, probs = c(.95)))
+
+tibble::tribble(
+  ~`Referència`,                               ~Valor,    ~ `Variació`,
+  "Renda mitjana llars AMB 2016-2017",         b,            NA,
+  "Renda mitjana llars AMB 2018-2019",         a,            round((a-b)/a,3)*100,
+  "Renda mitjana llars simulada - mínim",  d,            NA, 
+  "Renda mitjana llars simulada - màxim",  e,            round((e-d)/e,3)*100, 
+  "Renda mitjana llars simulada - q-.05",  g,            NA, 
+  "Renda mitjana llars simulada - q-.95",  h,            round((h-g)/h,3)*100
+) %>% 
+  kable(., caption = "Comparativa de la dispersió de les rendes simulades", digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+
+Distribució de les rendes
+=======================================================================
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+```{r eval=FALSE, include=FALSE}
+ggplot(md,
+       aes(x = Renda_mitjana_llars_IMV)) +
+  stat_ecdf()
+```
+
+
+```{r d} 
+
+rmlo <- dt %>% 
+  filter(PIL) %>% 
+  summarise(rml = Hmisc::wtd.mean(HY020, weights = RB050, 
+                      na.rm = T)) %>% 
+  pull(rml)
+
+rmls <- mean(md$Renda_mitjana_llars_IMV, 
+                      na.rm = T)
+dtrmls <- sd(md$Renda_mitjana_llars_IMV, 
+                      na.rm = T)
+cvrmls <- round(dtrmls/rmls * 100, 2)
+
+rmls95 <- quantile(md$Renda_mitjana_llars_IMV, probs = c(.025, .975))
+
+sd <- sd(md$Renda_mitjana_llars_IMV)
+md$RMLz <- scale(md$Renda_mitjana_llars_IMV)
+out <- sum(abs(md$RMLz) > 1.96)
+
+# altura <- length(
+#   which(
+#     md$Renda_mitjana_llars_IMV > rmls * 0.9999 &
+#     md$Renda_mitjana_llars_IMV < rmls * 1.0001
+#   )
+# )/nrow(md)
+
+ggplot(md,
+       aes(x = Renda_mitjana_llars_IMV)) +
+  geom_density() +
+  scale_color_viridis_c() + 
+  theme_light() +
+  geom_vline(aes(xintercept = rmls + (sd * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+  geom_vline(aes(xintercept = rmls - (sd * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+  annotate("text", 
+         color = "gray85", 
+         size = 5,
+         x = rmls + (sd * -2.6), 
+         y = .0015, 
+         label = paste0(">|1.96| = ", 
+                        round(out/nrow(md) * 100, 1), 
+                         "%"
+                        )) +
+  geom_segment(aes(x = rmls95[1], 
+                   y = 0, 
+                   xend = rmls95[2], 
+                   yend = 0),
+               color = "gray70",
+               size = 4) +
+  annotate("text", 
+           x = unname(rmls95[1]), 
+           y = 0, 
+           label = round(rmls95[1],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  annotate("text", 
+           x = unname(rmls95[2]), 
+           y = 0, 
+           label = round(rmls95[2],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  geom_vline(aes(xintercept = rmls),
+             colour   = "#BB9000",
+             linetype = "dashed") +
+  annotate("text",
+           x = rmls,
+           y = 0.001,
+           label = paste0("CV = ", cvrmls, "%"),
+           size = 3,
+           color = "purple", 
+           hjust = 0.25) +
+  annotate("text",
+           x = rmls,
+           y = 0.003,
+           label = paste0("Estimació: \n", round(rmls,2)),
+           size = 3.5,
+           color = "#BB9000", 
+           hjust = 1.5) +
+  annotate("text",
+           x = max(md$Renda_mitjana_llars_IMV),
+           y = 0.003,
+           label = paste0("Valor inicial: \n", round(rmlo,2)),
+           size = 3.5,
+           color = "#BB0000", 
+           hjust = .8) +
+labs(title = paste0(
+  "Simulació de la renda mitjana de les llars (després del IMV). \n",
+  ambit, " - ", "EPA ", epa
+                   ),
+     subtitle = paste0("Atur projectat: ", atur, 
+                       ". Iteracions: ",  iter),
+     x = "Renda mitjana de les llars",
+     y = "Densitat"
+)+ 
+  ylim(-.0001, NA)
+
+rm("rmls95")
+
+```
+
+
+```{r e} 
+
+gpre  <- laeken::gini(dt$IE_gini, weights = dt$RB050, 
+                      na.rm = T)$value
+gpost <- mean(md$Gini_IMV, 
+                      na.rm = T)
+gdt <- sd(md$Gini_IMV, 
+                      na.rm = T)
+gcv <- round(gdt/gpost,4)*100
+
+gini95 <- quantile(md$Gini_IMV, probs = c(.025, .975))
+
+sdg <- sd(md$Gini_IMV)
+
+md$GINz <- scale(md$Gini_IMV)
+out2 <- sum(abs(md$GINz) > 1.96)
+
+
+ggplot(md,
+       aes(x = Gini_IMV)) +
+  geom_density() +
+  theme_light() +
+    annotate("text",
+           x = gpost,
+           y = 0.5,
+           label = paste0("CV = ", gcv, "%"),
+           size = 3,
+           color = "purple", 
+           hjust = 0.25) +
+    geom_segment(aes(x = gini95[1], 
+                   y = 0, 
+                   xend = gini95[2], 
+                   yend = 0),
+               color = "gray70",
+               size = 4) +
+    geom_vline(aes(xintercept = gpost + (sdg * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    geom_vline(aes(xintercept = gpost - (sdg * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    annotate("text", 
+         color = "gray85", 
+         size = 5,
+         x = gpost + (sdg * -2.6), 
+         y = 1, 
+         label = paste0(">|1.96| = ", 
+                        round(out2/nrow(md) * 100, 1), 
+                         "%"
+                        )) +
+  annotate("text", 
+           x = unname(gini95[1]), 
+           y = 0, 
+           label = round(gini95[1],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  annotate("text", 
+           x = unname(gini95[2]), 
+           y = 0, 
+           label = round(gini95[2],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  geom_vline(aes(xintercept = unlist(gpre)),
+             colour   = "#BB0000",
+             linetype = "dashed") +
+  annotate("text",
+           x = gpre,
+           y = 1.7,
+           label = paste0("Valor inicial:\n   ", round(gpre,2)),
+           size = 3.5,
+           color = "#BB0000", 
+           hjust = -.25) +
+  geom_vline(aes(xintercept = unlist(gpost)),
+             colour   = "#BB9000",
+             linetype = "dashed") +
+  annotate("text",
+           x = gpost,
+           y = 1.7,
+           label = paste0("Estimació: \n   ", round(gpost,2)),
+           size = 3.5,
+           color = "#BB9000", 
+           hjust = -.25) +
+labs(title = paste0(
+       "Simulació de l'Índex de Gini (després del IMV). \n",
+       ambit, " - ", "EPA ", epa
+                    ),
+     subtitle = paste0("Atur projectat: ", atur, 
+                       ". Iteracions: ",  iter),
+     x = "Gini",
+     y = "Densitat"
+) + 
+  ylim(-.1, NA)
+
+
+```
+
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+```{r f} 
+
+ieo <- Hmisc::wtd.quantile(dt$IE, 
+                           weights = dt$RB050, 
+                           probs = c(.5), 
+                           na.rm = T)
+
+ies <- mean(md$Mediana_IE, 
+                      na.rm = T)
+iedt <- sd(md$Mediana_IE, 
+                      na.rm = T)
+
+iecv <- round(iedt/ies,4) * 100
+
+ies95 <- quantile(md$Mediana_IE, probs = c(.025, .975))
+
+sdie <- sd(md$Mediana_IE)
+
+md$IEz <- scale(md$Mediana_IE)
+out3 <- sum(abs(md$IEz) > 1.96)
+
+
+
+ggplot(md,
+       aes(x = Mediana_IE)) +
+  # geom_boxplot()
+  geom_density() +
+  scale_color_viridis_c() + 
+  theme_light() +
+      annotate("text",
+           x = ies,
+           y = 0.0005,
+           label = paste0("CV = ", iecv, "%"),
+           size = 3,
+           color = "purple", 
+           hjust = 0.25) +
+    geom_segment(aes(x = ies95[1], 
+                   y = 0, 
+                   xend = ies95[2], 
+                   yend = 0),
+               color = "gray70",
+               size = 4) +
+    geom_vline(aes(xintercept = ies + (sdie * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    geom_vline(aes(xintercept = ies - (sdie * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    annotate("text", 
+         color = "gray85", 
+         size = 5,
+         x = ies + (sdie * -2.6), 
+         y = .001, 
+         label = paste0(">|1.96| = ", 
+                        round(out3/nrow(md) * 100, 1), 
+                         "%"
+                        )) +
+  annotate("text", 
+           x = unname(ies95[1]), 
+           y = 0, 
+           label = round(ies95[1],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  annotate("text", 
+           x = unname(ies95[2]), 
+           y = 0, 
+           label = round(ies95[2],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  geom_vline(aes(xintercept = ies),
+             colour   = "#BB9000",
+             linetype = "dashed") +
+  annotate("text",
+           x = ies,
+           y = 0.0015,
+           label = paste0("Estimació: \n", round(ies,2)),
+           size = 3.5,
+           color = "#BB9000", hjust = -.25) +
+  annotate("text",
+           x = max(md$Mediana_IE),
+           y = 0.002,
+           label = paste0("Valor inicial: \n   ", round(ieo,2)),
+           size = 3.5,
+           color = "#BB0000", 
+           hjust = 1) +
+labs(title = paste0(
+  "Simulació de la mediana dels ingressos equivalents (abans del IMV). \n",
+  ambit, " - ", "EPA ", epa
+                   ),
+     subtitle = paste0("Atur projectat: ", atur, 
+                       ". Iteracions: ",  iter),
+     x = "Mediana dels ingressos Equivalents",
+     y = "Densitat"
+) + 
+  ylim(-0.0001, NA)
+
+
+```
+
+
+Risc de pobresa
+=======================================================================
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+```{r g}
+TRP_orig <- count(dt, vhPobreza, wt = RB050) %>% 
+            mutate(tt = sum(n), 
+                   pp = round(n/tt*100,1)) %>% 
+            filter(vhPobreza == "Pobre") %>% 
+            pull(pp)
+
+TRP_sim  <- mean(md$COV_TRP_ANC_IMV60, 
+                      na.rm = T)
+  
+trp95 <- quantile(md$COV_TRP_ANC_IMV60, probs = c(.025, .975))
+dtp6 <- sd(md$COV_TRP_ANC_IMV60)
+
+sdtp6 <- sd(md$COV_TRP_ANC_IMV60)
+
+md$tp6z <- scale(md$COV_TRP_ANC_IMV60)
+out4 <- sum(abs(md$tp6z) > 1.96)
+
+```
+
+```{r h}  
+
+ggplot(md,
+       aes(x = COV_TRP_ANC_IMV60)) +
+  geom_density() +
+  scale_color_viridis_c() + 
+  theme_light() +
+    geom_vline(aes(xintercept = TRP_sim + (sdtp6 * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    geom_vline(aes(xintercept = TRP_sim - (sdtp6 * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    annotate("text", 
+         color = "gray85", 
+         size = 5,
+         x = TRP_sim + (sdtp6 * -2.6), 
+         y = .2, 
+         label = paste0(">|1.96| = ", 
+                        round(out4/nrow(md) * 100, 1), 
+                         "%"
+                        )) +
+    geom_segment(aes(x = trp95[1], 
+                   y = 0, 
+                   xend = trp95[2], 
+                   yend = 0),
+               color = "gray70",
+               size = 4) +
+    geom_vline(aes(xintercept = TRP_sim + (dtp6 * 1.96)), 
+           colour = "gray80", 
+           linetype = "dotted") +
+    geom_vline(aes(xintercept = TRP_sim - (dtp6 * 1.96)), 
+           colour = "gray80", 
+           linetype = "dotted") +
+  annotate("text", 
+           x = unname(trp95[1]), 
+           y = 0, 
+           label = round(trp95[1],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  annotate("text", 
+           x = unname(trp95[2]), 
+           y = 0, 
+           label = round(trp95[2],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  # geom_vline(aes(xintercept = TRP_orig),
+  #            colour   = "#BB0000",
+  #            linetype = "dashed") +
+  annotate("text",
+           x = (TRP_sim * 0.95),
+           y = .65,
+           label = paste0("   TRP 60 \n", ambit,": ", TRP_orig),
+           color = "#BB0000", 
+           hjust = -.25) +
+  geom_vline(aes(xintercept = TRP_sim),
+             colour   = "#BB9000",
+             linetype = "dashed") +
+  annotate("text",
+           x = TRP_sim,
+           y = .65,
+           label = paste0("   Mitjana \nsimulació: ", 
+                          round(TRP_sim,1)),
+           color = "#BB9000", 
+           hjust = -.25) +
+  # annotate("text",
+  #          x = TRP_simA * .97,
+  #          y = 1.25,
+  #          label = paste0("   Mitjana \nancorada: ", 
+  #                         round(TRP_simA,1)),
+  #          color = "#DD5000", 
+  #          hjust = -.25) +
+  labs(title = "Simulació del risc de pobresa moderada i ancorada \n(60%, després del IMV)",
+       subtitle = paste0("Llindar ", ambit, ". ",
+                         "Atur projectat: ", atur, 
+                         ". Iteracions: ",  iter),
+       x = "Taxa de risc de pobresa moderada ancorada",
+       y = "Densitat") + 
+  ylim(-.1, NA)
+
+rm("trp95")
+
+
+```
+
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+```{r k}
+TRP_orig <- count(dt, 
+                  TRP30, 
+                  wt = RB050) %>% 
+  mutate(tt = sum(n), 
+         pp = round(n/tt*100,1)) %>% 
+  filter(TRP30 == "Pobre") %>% 
+  pull(pp)
+
+# TRP_sim  <- mean(md$COV_TRP30, 
+#                       na.rm = T)
+  
+TRP_simA <- mean(md$COV_TRP_ANC_IMV30, 
+                      na.rm = T)
+
+trp95 <- quantile(md$COV_TRP_ANC_IMV30, probs = c(.025, .975))
+
+sdtp3 <- sd(md$COV_TRP_ANC_IMV30)
+
+md$tp3z <- scale(md$COV_TRP_ANC_IMV30)
+out5 <- sum(abs(md$tp3z) > 1.96)
+
+```
+
+```{r l}  
+
+ggplot(md,
+       aes(x = COV_TRP_ANC_IMV30)) +
+  geom_density() +
+    geom_vline(aes(xintercept = TRP_simA + (sdtp3 * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    geom_vline(aes(xintercept = TRP_simA - (sdtp3 * 1.96)), 
+             colour = "gray80", 
+             linetype = "dotted") +
+    annotate("text", 
+         color = "gray85", 
+         size = 5,
+         x = TRP_simA + (sdtp3 * -2.6), 
+         y = .2, 
+         label = paste0(">|1.96| = ", 
+                        round(out5/nrow(md) * 100, 1), 
+                         "%"
+                        )) +
+  scale_color_viridis_c() + 
+  theme_light() +
+    geom_segment(aes(x = trp95[1], 
+                   y = 0, 
+                   xend = trp95[2], 
+                   yend = 0),
+               color = "gray70",
+               size = 4) +
+  annotate("text", 
+           x = unname(trp95[1]), 
+           y = 0, 
+           label = round(trp95[1],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  annotate("text", 
+           x = unname(trp95[2]), 
+           y = 0, 
+           label = round(trp95[2],1), 
+           color = "gray70", 
+           size = 3.5, 
+           vjust = 1.75) +
+  geom_vline(aes(xintercept = TRP_orig),
+             colour   = "#BB0000",
+             linetype = "dashed") +
+  annotate("text",
+           x = TRP_orig,
+           y = 1,
+           label = paste0("   TRP 30 \n", ambit,": ", TRP_orig),
+           color = "#BB0000", 
+           hjust = -.25) +
+  geom_vline(aes(xintercept = TRP_simA),
+             colour   = "#BB9000",
+             linetype = "dashed") +
+  annotate("text",
+           x = TRP_simA,
+           y = .75,
+           label = paste0("   Mitjana \nancorada: ", 
+                          round(TRP_simA,1)),
+           color = "#DD5000", 
+           hjust = -.25) +
+  labs(title = "Simulació del risc de pobresa extrema \n(30%, després del IMV).", 
+       subtitle = paste0("Llindar", ambit, ". ",
+                         "Atur projectat: ", atur, 
+                         ". Iteracions: ",  iter),
+       x = "Taxa de risc de pobresa extrema",
+       y = "Densitat") + 
+  ylim(-.1, NA)
+
+rm("trp95")
+```
+
+
+
+Tests
+=======================================================================
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+
+```{r o}
+
+cbPalette <- rev(c("gray90", "black", "darkgoldenrod1", "brown2", "deepskyblue"))
+
+llars_atur  <- unique(dt$IDllar[dt$COV_select_atur])
+llars_cobra <- unique(dt$IDllar[dt$COV_select_cobra])
+llars_erto  <- unique(dt$IDllar[dt$COV_select_erto])
+
+
+dd <- dt %>% 
+  filter(stringr::str_sub(ID, start = -2) == "01") %>% 
+  select(contains("select"), 
+         IDllar,
+         HY020, COV_hy020, COV_hy020_IMV, 
+         RB050, 
+         contains("elegible")) %>% 
+  mutate(status = case_when(
+    COV_hy020 != COV_hy020_IMV ~ "IMV",
+    IDllar %in% llars_erto ~ "ERTO", 
+    IDllar %in% llars_cobra ~ "Atur amb prestació", 
+    (IDllar %in% llars_atur & !(IDllar %in% llars_cobra)) ~ "Atur sense prestació", 
+    # (ceiling(COV_hy020) == ceiling(HY020)) ~ "Sense canvis"
+    (ceiling(COV_hy020) - ceiling(HY020)) < 50 ~ "Sense canvis"
+    )) 
+  # mutate(imv = ifelse(COV_hy020 != COV_hy020_IMV, T, F)) %>% 
+pg <-   ggplot(dd, 
+         aes(x = HY020, 
+             y = COV_hy020, 
+             group = status, 
+             # shape = imv,
+             color = status 
+             )) + 
+  geom_point(alpha = .4, size = 1.7) + 
+  scale_color_manual(values = cbPalette) +
+  # scale_shape_manual(values = c(1, 19))+
+  theme_light() +
+  labs(
+    title = NULL, 
+    subtitle = NULL, 
+    x = NULL, 
+    y = NULL, 
+    color = NULL, 
+    shape = NULL
+  ) + 
+  theme(legend.position = "none", 
+       panel.background = element_rect(
+         fill = "grey96",
+         colour = "grey96",
+         size = 0.5, linetype = "solid")
+         )
+
+
+pp <- ggplot(dd, 
+         aes(x = HY020, 
+             y = COV_hy020, 
+             group = status, 
+             color = status 
+             )) + 
+  geom_point(alpha = .4, size = 1.7) + 
+  scale_color_manual(values = cbPalette) +
+  theme_light() +
+  labs(
+    title = "Distribució de les rendes abans i després de la simulació.", 
+    subtitle = "COVID19", 
+    x = "Renda disponible original", 
+    y = "Renda disponible simulada", 
+    color = NULL, 
+    shape = NULL
+  ) + 
+  xlim(-3000, 100000) + 
+  ylim(-3000, 100000)  
+
+pp + patchwork::inset_element(pg, 
+                   left   = -0.01, 
+                   bottom = 0.55, 
+                   right  = 0.55, 
+                   top    = 1.01)
+  
+```
+
+
+```{r p}
+dt %>% 
+  filter(COV_exclusio) %>% 
+    select(contains("select"), 
+         HY020, COV_hy020) %>% 
+  mutate(status = case_when(
+    COV_select_erto ~ "ERTO", 
+    COV_select_cobra ~ "Atur amb prestació", 
+    (COV_select_atur & !COV_select_cobra) ~ "Atur sense prestació", 
+    (!COV_select_erto & !COV_select_atur) ~ "Sense canvis"
+    )) %>% 
+  ggplot(., 
+         aes(x = HY020, 
+             y = COV_hy020, 
+             group = status, 
+             color = status)) + 
+  geom_point(alpha = .5, size = 2) + 
+  scale_color_manual(values = cbPalette) +
+  theme_light() + 
+    labs(
+    title = "Distribució de les rendes abans i després de la \nsimulació entre perfils d'atur de llarga durada.", 
+    subtitle = "COVID19", 
+    x = "Renda disponible original", 
+    y = "Renda disponible simulada", 
+    color = NULL
+  )
+
+  
+```
+
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+```{r rr}
+obs <- dt %>%
+  filter(COV_MESOS_ACTIV > 5) %>%
+  filter(COV_select_erto == T) %>% 
+  select(pl111a, RB050) %>%
+  count(pl111a, wt = RB050) %>%
+  mutate(tt = sum(n),
+         pp = n/tt*100) %>%
+  select(pl111a, simulat = pp)
+
+esp <- readRDS(paste0(ruta1, "/",  "", "F1_ERTO_sect_ESP"))
+
+esp$short <- c(
+  "Sector primari", 
+  "Manufactura", 
+  "Extractives", 
+  "Indústria maquinària", 
+  "Construcció", 
+  "Comerç i hosteleria", 
+  "Transport", 
+  "Serv. financers", 
+  "AAPP", 
+  "Altres serv.", 
+  "No consta"
+)
+
+obs$esperat <- esp$Val[match(obs$pl111a, esp$codi)]
+
+obs <- obs %>%
+  ungroup(.) %>%
+  droplevels(.) %>%
+  arrange(esperat)
+
+obs$pl111a <- forcats::fct_inorder(obs$pl111a)
+
+  obs %>%
+  gather("Var", "Val", -pl111a) %>%
+  ggplot(.,
+         aes(x = pl111a,
+             y = Val,
+             fill = Var,
+             group = Var)) +
+  geom_bar(stat = "identity",
+           position = "dodge") +
+  coord_flip() +
+    labs(
+      title = "Proporció simulada vs. risc d'ERTO \nper sectors (EPA-T2)",
+      subtitle = "Simulació COVID19 (escenari més probable)",
+      x = NULL,
+      y = ("%"),
+      fill = NULL
+    ) +
+    scale_x_discrete(breaks = c(esp$codi),
+                     labels = c(esp$short)) 
+
+```
+
+```{r}
+
+dt %>% 
+  filter(COV_select_atur | COV_select_erto) %>% 
+  select(contains("COV_estim_mesos")) %>% 
+  gather("Var", "Mesos") %>% 
+  ggplot(., aes(x = Mesos, 
+                # group = Var, 
+                color = Var)) + 
+  stat_ecdf() + 
+  # geom_density() +
+  scale_x_continuous(breaks = seq(1, 12, 1)) + 
+  scale_color_discrete(
+    name = NULL,
+    breaks = c("COV_estim_mesos_atur", 
+               "COV_estim_mesos_erto"),
+    labels = c("Atur", 
+               "Erto")) + 
+  theme(panel.grid.minor.x = element_blank()) +
+  labs(
+    title = "Distribució de la durada dels episodis d'ERTO/atur", 
+    y = "ecd"
+  )
+```
+
+Checks
+=======================================================================
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+La selecció dels casos es fa sobre les dades sense ponderar. En ponderar es poden observar certes diferències respecte a la taxa inicialment projectada. La taula a continuació resumeix els resultats. 
+
+```{r atur, include=FALSE}
+ATR_proj <- readRDS(paste0(ruta1, "/",  "F1_TGatur"))* 100
+num1     <- sum(dt$RB050[dt$COV_select_atur])
+denom1   <- sum(dt$RB050[dt$COV_Pactiva])
+ATR_calc <- num1/denom1 * 100
+
+```
+
+```{r IMV}
+imv <- grep("IMV", param$param)
+IMV_proj <- (sum(as.numeric(param$val[imv])) ) * 100
+pool <- sum(dd$RB050[dd$COV_elegible_IMV | dd$COV_elegible_IMV2])
+IMV_calc <- (sum(dd$RB050[dd$status == "IMV"], na.rm = T)/pool) * 100
+```
+
+```{r erto}
+ert <- grep("Taxa_erto", param$param)
+ERT_proj <- as.numeric(param$val[ert]) * 100
+denom <- sum(dt$RB050[dt$COV_Ocupats])
+num   <- sum(dt$RB050[dt$COV_select_erto])
+ERT_calc <- num/denom * 100
+```
+
+```{r cobertura}
+COB_proj <- readRDS(paste0(ruta1, "/",  "F1_TGcob"))* 100
+denom2 <- sum(dt$RB050[dt$COV_select_atur])
+num2   <- sum(dt$RB050[dt$COV_select_cobra])
+COB_calc <- num2/denom2 * 100
+```
+
+
+```{r}
+tibble::tribble(
+       ~Indicador,    ~Projectat,  ~`Simulat (ponderat)`,
+    "Taxa d'atur",      ATR_proj,               ATR_calc,
+ "Taxa cobertura",      COB_proj,               COB_calc,
+   "Taxa d'ERTOs",      ERT_proj,               ERT_calc,
+  "Cobertura IMV",      IMV_proj,               IMV_calc 
+  )%>% kable(., 
+            caption = "Taxes projectades vs. simulades", 
+            digits = 1) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+```
+
+
+Checks de consistència
+
+```{r}
+tibble::tribble(
+       ~Indicador,            ~Esperat,     ~`Realitzat`,
+ "Nº repeticions",  as.character(iter),         nrow(md)
+  
+  )%>% kable(., 
+            caption = "Punts de control de l'execució", 
+            digits = 1) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+Els autònoms tenen una situació particular, en la mesura que s'ha observat que pateixen major risc d'anar a l'atur o de passar per un ERTO. Quina és la proporció d'autònoms a la mostra, i en quina mesura pateixen aquests riscos en comparació amb els assalariats?
+
+```{r}
+lvl <- levels(dt$PL031)
+atm <- lvl[grep("cuenta propia", lvl)]
+ass <- lvl[grep("Asalariado", lvl)]
+
+dt %>% 
+  filter(COV_Pactiva) %>% 
+  mutate(PL031_R8 = forcats::fct_collapse(
+    PL031, 
+    Assalariats = ass, 
+    Autonoms = atm, 
+    Altres = setdiff(lvl, c(atm, ass))
+  )) %>% 
+  group_by(PL031_R8) %>% 
+  summarise(N    = sum(PB040), 
+            aturN = sum(PB040[COV_select_atur]),
+            aturP = aturN/N, 
+            ertoN = sum(PB040[COV_select_erto]), 
+            ertoP = ertoN/N
+            ) %>% 
+  filter(!is.na(PL031_R8)) %>% 
+  select(PL031_R8, aturP, ertoP) %>% 
+  kable(., 
+        caption = "Risc d'atur i d'ERTO entre assalariats i autònoms", 
+        digits = 3)%>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+```
+

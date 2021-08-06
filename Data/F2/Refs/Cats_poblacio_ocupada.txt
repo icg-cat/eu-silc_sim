@@ -1,0 +1,8 @@
+Asalariado a tiempo completo
+Asalariado a tiempo parcial
+Trabajador por cuenta propia a tiempo completo
+Trabajador por cuenta propia a tiempo parcial
+Asalariado (tiempo completo)
+Asalariado (tiempo parcial)
+Trabajador por cuenta propia (tiempo completo)
+Trabajador por cuenta propia (tiempo parcial)

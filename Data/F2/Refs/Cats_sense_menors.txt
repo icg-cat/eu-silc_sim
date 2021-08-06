@@ -1,0 +1,9 @@
+Una persona: hombre de menos de 30 años
+Una persona: hombre de entre 30 y 64 años
+Una persona: hombre de 65 o más años
+Una persona: mujer de menos de 30 años
+Una persona: mujer de entre 30 y 64 años
+Mujer de 65 o más años
+2 adultos sin niños dependientes económicamente, teniendo ambos menos de 65 años
+2 adultos sin niños dependientes económicamente, al menos una persona de 65 o más años
+Otros hogares sin niños dependientes económicamente

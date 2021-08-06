@@ -1,0 +1,423 @@
+---
+params:
+  territori: "myterritori"
+title: "Anàlisi cobertura - escenari contrafàctic"
+date: "`r format(Sys.time(), '%d %B, %Y - %H:%M')`"
+author: "IERMB"
+output: 
+ prettydoc::html_pretty:
+  theme: cayman
+editor_options: 
+  chunk_output_type: console
+---
+
+Tots els resultats d'aquest document fan referència a la simulació amb dades per `r params$territori`. 
+
+L'escenari contra-fàctic es basa en l'escenari inicialment simulat, ja sigui U3 o U5. La població que inicialment s'havia  assignat a ERTO es suma a la taxa d'atur, i es distribueix la prestació d'atur d'acord amb la proporció inicialment prevista. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      message = FALSE, 
+                      warning = FALSE, 
+                      dpi = 300)
+```
+
+```{r library, message=FALSE, warning=F, include=F}
+library(tidyverse, warn.conflicts = F, quietly = T)
+library(knitr, warn.conflicts = F, quietly = T)
+library(rlang, warn.conflicts = F, quietly = T)
+library(scales, warn.conflicts = F, quietly = T)
+library(kableExtra, warn.conflicts = F, quietly = T)
+library(targets)
+
+```
+
+```{r dades}
+# Sobre la marxa de la simulació ####
+U5 <- tar_read(F4_dd_dashb)
+U6 <- tar_read(F5_contrafactic)
+newvars <- setdiff(names(U6), names(U5))
+U5[,newvars] <- U6[match(U5$ID, U6$ID), newvars]
+
+param <- tar_read(parametres)
+
+filt_var <- sym(param$val[param$param == "ambit_var"])
+do <- readRDS(here::here(param$val[param$param == "bsl_data"])) %>%
+   filter({{filt_var}} %in% 
+          eval(
+             parse(
+                text = param$val[param$param == "ambit"])))
+
+
+rm("U6")
+```
+
+```{r}
+# variable ORIGINAL (no deflactada d'IE)
+U5$ie_orig <- do$IE[match(U5$ID, do$ID)]
+rm(do)
+
+U5$CF1_IE_Gini <- ifelse(U5$CF1_IE <0, 1, U5$CF1_IE)
+U5$CF0_IE_Gini <- ifelse(U5$CF0_IE <0, 1, U5$CF0_IE)
+```
+
+
+```{r myfuncs}
+fes_pp <- function(x, tt){
+   # stop()
+   round((x/tt * 100), 2)
+}
+
+fes_variacions <- function(taula){
+   taula %>% 
+      mutate(
+         Var_IMV = (simulat-simulat_preIMV)/simulat_preIMV*100,
+         Var_CF1 = (simulat-contrafactic1)/contrafactic1*100,
+         Var_CF0 = (simulat-contrafactic0)/contrafactic0*100
+      )
+}
+```
+
+```{r mykable}
+mykable <- function(tab, decimals = 1){
+   tab %>% 
+      knitr::kable(., digits = decimals, "html") %>% 
+      kable_styling(bootstrap_options =
+                       c("striped", 
+                         "hover", 
+                         "condensed", 
+                         "responsive"), 
+                    full_width = F, 
+                    position = "left")
+      
+}
+```
+
+```{r theme}
+old <- theme_set(theme_minimal())
+
+my_pal <- RColorBrewer::brewer.pal(n = 11, "RdGy")[c(2, 9, 4, 11)] 
+
+```
+
+```{r peces_taula_ID, eval=T, include=FALSE}
+# defineix les peces clau per la taula amb identificadors simulació
+esc    <- param$val[param$param == "UN"]
+iter   <- param$val[param$param == "iteracions"] %>% as.double(.)
+atur   <- readRDS(here::here("_targets/objects/F1_TGatur0")) %>% 
+   round(., 3) %>%  as.double(.) * 100
+erto   <- (as.double(param$val[param$param == "Taxa_erto_proj"]) * 100) %>% round(.,1)
+prop   <- readRDS(here::here("_targets/objects/F1_TGcob"))  %>% 
+   round(.,3) %>% as.double(.) * 100
+epa    <- param$val[param$param == "epa"]
+infERT <- param$val[param$param == "erto"]
+ambit  <- unique(U5$ambit_simulacio)
+bsl_dt <- ifelse(params$territori %in% c("BCN", "AMB", "ATM"), "EMCV", "ECV")
+titol  <- paste0(params$territori, " - ", epa)
+
+```
+
+```{r taula_ID, eval=T, include=T}
+
+tibble::tribble(
+  ~Variable,                       ~Valor, 
+  "Territori",                      ambit, 
+  "Escenari",                       esc,
+  "n",                              as.character(nrow(U5)),
+  "Iteracions",                     as.character(iter),
+  "Data simulació",                 format(Sys.time(), '%d/%m/%y'),
+  "Font dades atur",                paste0("EPA ", epa), 
+  "Referència temp. ERTOS",         infERT,
+  "Taxa d'atur projectada",         as.character(atur), 
+  "Proporció atur amb prestació",   as.character(prop), 
+  "Població afectada per ERTO",     as.character(erto), 
+  "Assignació mesos a l'atur",      "probabilística", 
+  "Base dades renda",               bsl_dt
+) %>%
+  kable(., caption = "Referències simulació", digits = 1) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                full_width = F)
+
+```
+
+
+
+* **contrafactic 1**: escenari en què tothom prèviament seleccionat per anar a ERTO passa a l'atur en lloc de ERTO. segueixen el circuit de l'atur, el que vol dir que < 30% cobren prestació per atur
+
+* **contrafactic 0**: escenari previ a tota transferència simulada (atur, erto, imv). es redueixen les rendes del treball de les persones a qui s'ha assignat atur, però no s'imputa transferència per atur. Es corregeix penalització impostos aplicada durant simulació. 
+
+
+**Taula 1.1:**
+
+Mitjana dels IE segons deciles (deciles **originals EMCV/ECV**), sense IMV, sense Ertos i sense atur. 
+
+```{r}
+U5$deciles <- factor(IERMB::fes_WQnt(ie  = U5$ie_orig, 
+                       pes = U5$RB050, 
+                       ps  = seq(0,1, .1)), 
+                     labels = c(1:10))
+
+```
+
+```{r}
+
+U5 %>% 
+   group_by(deciles) %>% 
+   summarise(original = Hmisc::wtd.mean(ie_orig, RB050), 
+             simulat = Hmisc::wtd.mean(COV_IE_IMV, RB050), 
+             simulat_preIMV = Hmisc::wtd.mean(COV_IE, RB050), 
+             contrafactic1 = Hmisc::wtd.mean(CF1_IE, RB050), 
+             contrafactic0 = Hmisc::wtd.mean(CF0_IE, RB050)
+             )%>% 
+   fes_variacions(.) %>% 
+   mykable(.)
+
+```
+
+
+**Taula 1.1.1:**
+
+Mitjana dels IE segons deciles agrupades (deciles **originals EMCV/ECV**), sense IMV, sense Ertos i sense atur. 
+
+```{r}
+
+U5$deciles3 <- U5$deciles
+levels(U5$deciles3) <- c(rep("Baixos", 3), 
+                             rep("Intermedis", 4), 
+                             rep("Alts", 3))
+
+```
+
+```{r}
+
+U5 %>% 
+   group_by(deciles3) %>% 
+   summarise(original = Hmisc::wtd.mean(ie_orig, RB050), 
+             simulat = Hmisc::wtd.mean(COV_IE_IMV, RB050), 
+             simulat_preIMV = Hmisc::wtd.mean(COV_IE, RB050), 
+             contrafactic1 = Hmisc::wtd.mean(CF1_IE, RB050), 
+             contrafactic0 = Hmisc::wtd.mean(CF0_IE, RB050)
+             )%>% 
+   fes_variacions(.) %>% 
+   mykable(.)
+
+```
+
+
+**Taula 1.2:**
+
+Mitjana dels IE segons deciles (deciles **després de simulació**), sense IMV, sense Ertos i sense atur. 
+
+```{r}
+U5$deciles_sim <- factor(IERMB::fes_WQnt(ie  = U5$COV_IE_IMV, 
+                       pes = U5$RB050, 
+                       ps  = seq(0,1, .1)), 
+                     labels = c(1:10))
+
+```
+
+```{r}
+
+U5 %>% 
+   group_by(deciles_sim) %>% 
+   summarise(original = Hmisc::wtd.mean(ie_orig, RB050), 
+             simulat = Hmisc::wtd.mean(COV_IE_IMV, RB050), 
+             simulat_preIMV = Hmisc::wtd.mean(COV_IE, RB050), 
+             contrafactic1 = Hmisc::wtd.mean(CF1_IE, RB050), 
+             contrafactic0 = Hmisc::wtd.mean(CF0_IE, RB050)
+             ) %>% 
+   fes_variacions(.) %>% 
+   mykable(.)
+
+```
+
+**Taula 1.2.1:**
+
+Mitjana dels IE segons deciles agrupades (deciles **després de simulació**), sense IMV, sense Ertos i sense atur. 
+
+```{r}
+
+U5$decilesSim3 <- U5$deciles_sim
+levels(U5$decilesSim3) <- c(rep("Baixos", 3), 
+                             rep("Intermedis", 4), 
+                             rep("Alts", 3))
+
+```
+
+```{r}
+
+U5 %>% 
+   group_by(decilesSim3) %>% 
+   summarise(original = Hmisc::wtd.mean(ie_orig, RB050), 
+             simulat = Hmisc::wtd.mean(COV_IE_IMV, RB050), 
+             simulat_preIMV = Hmisc::wtd.mean(COV_IE, RB050), 
+             contrafactic1 = Hmisc::wtd.mean(CF1_IE, RB050), 
+             contrafactic0 = Hmisc::wtd.mean(CF0_IE, RB050)
+             ) %>% 
+   fes_variacions(.) %>% 
+   mykable(.)
+
+```
+
+
+**Taula 2:** 
+
+*taula 8 de l'informe (gini, TRP60, TRP30, IRP) amb una columna més que inclogui abans de l'atur*
+
+El llindar de referència per les TRP és el de la ECV/EMCV, és a dir, **totes les TRP a continuació són ancorades**. 
+
+En canvi, la IRP *no està ancorada*. 
+
+
+```{r}
+# calcula trps ancorades per escenaris contrafàctics
+fes_mediana <- function(ie){
+   Hmisc::wtd.quantile(x = U5[[ie]], 
+                       weights = U5$RB050, 
+                       probs = c(.5))
+}
+
+mediana <- fes_mediana("ie_orig")
+percs <- c(60, 40, 30)
+
+U5[,paste0("CF1_TRP", percs, "ANC")] <- lapply(percs, function(perc){
+   factor(
+      ifelse(
+         U5$CF1_IE < (mediana * perc/100),
+         "Pobre", "No pobre"
+      )
+   )
+})
+
+U5[,paste0("CF0_TRP", percs, "ANC")] <- lapply(percs, function(perc){
+   factor(
+      ifelse(
+         U5$CF0_IE < (mediana * perc/100),
+         "Pobre", "No pobre"
+      )
+   )
+})
+
+U5$CF1_TRP60 <- factor(
+   ifelse(
+      U5$CF1_IE < (fes_mediana("CF1_IE") * .6), 
+      "Pobre", "No pobre"
+   )
+)
+
+U5$CF0_TRP60 <- factor(
+   ifelse(
+      U5$CF0_IE < (fes_mediana("CF0_IE") * .6), 
+      "Pobre", "No pobre"
+   )
+)
+
+```
+
+```{r}
+# fes taula amb trps
+trps <- U5 %>% 
+   select(contains("COV_TRP"), 
+          matches("CF._TRP"), 
+          RB050) %>% 
+      summarise(
+      trp60_sim    = sum(RB050[COV_TRP_ANC_IMV60 == "Pobre"]), 
+      trp40_sim    = sum(RB050[COV_TRP_ANC_IMV40 == "Pobre"]), 
+      trp30_sim    = sum(RB050[COV_TRP_ANC_IMV30 == "Pobre"]),
+      trp60_preIMV = sum(RB050[COV_TRP_ANC60 == "Pobre"]), 
+      trp40_preIMV = sum(RB050[COV_TRP_ANC40 == "Pobre"]), 
+      trp30_preIMV = sum(RB050[COV_TRP_ANC30 == "Pobre"]),
+      trp60_CF1    = sum(RB050[CF1_TRP60ANC == "Pobre"]), 
+      trp40_CF1    = sum(RB050[CF1_TRP40ANC == "Pobre"]), 
+      trp30_CF1    = sum(RB050[CF1_TRP30ANC == "Pobre"]),
+      trp60_CF0    = sum(RB050[CF0_TRP60ANC == "Pobre"]), 
+      trp40_CF0    = sum(RB050[CF0_TRP40ANC == "Pobre"]), 
+      trp30_CF0    = sum(RB050[CF0_TRP30ANC == "Pobre"]),
+      tt  = sum(RB050)
+   ) %>% 
+   mutate(across(everything(), ~ fes_pp(x = .x, tt))) %>% 
+   gather("TRP", "Valor") %>% 
+   filter(TRP != "tt") %>% 
+   separate(TRP, into = c("TRP", "quan")) %>% 
+   spread(., quan, Valor) %>% 
+   select(indicador = TRP, 
+          simulat = sim,
+          pre_IMV = preIMV, 
+          pre_ERTO = CF1, 
+          pre_atur = CF0) 
+   
+```
+
+```{r}
+# extreu ginis
+ginis <- 
+   U5 %>% 
+   select(COV_IE_Gini, COV_IE_Gini_IMV, CF1_IE_Gini, CF0_IE_Gini, RB050) %>% 
+   mutate(across(matches("IE"), ~ifelse(.x < 0.1, 1, .x))) %>% 
+   summarise(across(matches("IE"), ~laeken::gini(inc = .x, 
+                                                 weights = RB050)$value)) %>% 
+   mutate(indicador = "Gini") %>% 
+   select(indicador, 
+          simulat = COV_IE_Gini_IMV, 
+          pre_IMV = COV_IE_Gini, 
+          pre_ERTO = CF1_IE_Gini, 
+          pre_atur = CF0_IE_Gini)
+   
+
+            
+```
+
+```{r}
+# llindar no ancorat
+
+fes_irp <- function(trp, ie, llindar){
+      llindar <- Hmisc::wtd.quantile(x = U5[[ie]], 
+                               weights = U5$RB050, 
+                               probs   = c(.5)) * .6
+
+      med_pob <- Hmisc::wtd.quantile(x = U5[[ie]][U5[[trp]] == "Pobre"], 
+                          weights =  U5$RB050[U5[[trp]] == "Pobre"], 
+                          probs = c(.5))
+      irp <- round((llindar - med_pob) / llindar, 3)
+      c(irp = unname(irp),
+        llindar = unname(llindar), 
+        mediana_p = unname(med_pob))
+}
+
+## llista TRPs
+trpv <- Hmisc::Cs(COV_TRP_IMV60, # simulada inicial
+               COV_TRP60,        # simulada sense IMV
+               CF1_TRP60,        # contrafàctic sense ertos
+               CF0_TRP60)        # contrafàctic sense atur ni ertos
+## llista IE
+ies <- Hmisc::Cs(COV_IE_Gini_IMV, 
+                 COV_IE_Gini, 
+                 CF1_IE_Gini, 
+                 CF0_IE_Gini)
+
+
+irps <- purrr::map2(.x = trpv, 
+                    .y = ies, 
+                    .f = fes_irp, 
+                    llindar = llindar) %>% 
+   do.call("bind_rows", .) %>% 
+   t(.) %>% 
+   data.frame(.) %>% 
+   mutate(indicador = rownames(.)) %>% 
+   select(indicador, 
+          simulat = X1, 
+          pre_IMV = X2, 
+          pre_ERTO = X3, 
+          pre_atur = X4)
+   
+rownames(irps) <- NULL
+
+```
+
+```{r}
+bind_rows(trps, ginis, irps) %>% 
+   mykable(., decimals = 3)
+```
+
+
