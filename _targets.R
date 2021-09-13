@@ -1,17 +1,14 @@
-# Canvis: 210602-0900: L196 - tar_render: he canviat la referència a document unitari per explotació resultats
+# Setup ####
 defaultW <- getOption("warn")
 options(warn = -1)
 options(tidyverse.quiet = TRUE)
 options(warn = defaultW); rm("defaultW")
-# options(dplyr.summarise.inform = FALSE)
 
 library(targets)
 library(tarchetypes)
 library(tidyverse)
 library(future)
 library(future.callr)
-# library(clustermq)
-# options(clustermq.scheduler = "multicore")
 
 source("R/functions.R")
 
@@ -21,17 +18,15 @@ tar_option_set(packages = "tidyverse")
 # debug options ####
 tar_option_set(debug = "F2_dades")
 
-
-# carrega paràmetres ####
-full <- "U3-BCN"
+# load parameters ####
+full <- "U3-ESP"
 param <- openxlsx::read.xlsx("Data/sim_params.xlsx",
                              sheet = full)
 
 checks <- new.env(parent = .GlobalEnv)
 
-# parallelization
+# parallelization ####
 future::plan(future::multisession)
-# options(clustermq.scheduler = "multicore")
 
 # target objects ####
 list(
@@ -53,20 +48,20 @@ list(
     get("param")
   )
   ,
-  # calcula targets amb base Espanya
-    ## Taula probs individuals (només espanya)
+  # compute targets -  base Spain
+    ## Individual probs table (only spain)
   tar_target(
     F1_taula_probs_grups_ESP,
     mf_taula_anual(epa = epaESP,
                    UN = param$val[param$param == "UN"]))
   ,
-   ## Taula probs ERTO per sectors (només espanya)
+   ## Sector probs for ERTO 
   tar_target(
     F1_ERTO_sect_ESP,
     mf_prob_erto_sectors(epaESP))
   ,
-  # Calcula paràmetres per territori
-   ## Taxa d'atur
+  # Compute parameters by territory
+   ## unemployment rate
   tar_target(
     F1_TGatur0,
     mf_calcula_Tatur(epa = epa,
@@ -79,19 +74,19 @@ list(
     )
   ,
 
-   ## Taxes de cobertura prestacions atur
+   ## Uenmployment benefits reach
   tar_target(
     F1_TGcob,
     mf_calcula_Tcobertura(epa = epa,
                           UN  = param$val[param$param == "UN"]))
   ,
-   ## Durada estimada atur
+   ## unemployment length
   tar_target(
     F1_dur_atur,
     mf_prob_durada_atur(epa = epa,
                         UN  = param$val[param$param == "UN"]))
   ,
-  # Carrega i filtra taula durada ERTO
+  # ERTO tables
   tar_target(
     F1_dur_erto,
     read.csv2("Data/F1/210303_probs_durada_ERTOs.csv") %>%
@@ -156,13 +151,12 @@ list(
    )
   ,
  tar_target(
-   F3_resmat, # cal executar en blocs, no té dep directa
+   F3_resmat, # needs to be executed in blocks
    fes_COV_res_mat(ruta = "_targets/objects"))
  ,
  tar_target(
    F3_escenari,
    fes_COV_most_likely_curt(resmat   = F3_resmat,
-                            # mreslist = F3_mreslist,
                             dades    = F2_dades,
                             simrefs  = F3_simrefs,
                             Taxa_atur_proj  = F1_TGatur0,
@@ -219,55 +213,4 @@ tar_target(
            "11_Pla_explotacio_simulacions_ALL.Rmd"),
     params = list(territori = param$val[param$param == "ambit3"])
  )
-,
-  tar_render(
-    tules_contrafactic,
-    "Docs/12_Analisi_cobertura_contrafactic.RMD",
-    params = list(territori = param$val[param$param == "ambit3"])
- )
-,
-tar_target(
-  tupper,
-  zip::zip(
-    zipfile = paste0(
-      here::here("Outputs"),
-      "/",
-      titol, "_",
-      tot_be,
-      ".zip"),
-    files = c(
-      list.files( #1
-       path = "_targets/objects",
-       full.names = T),
-      list.files( #2
-       path = "R",
-       pattern = "^functions\\.R$",
-       full.names = T
-      ),
-      list.files( #3
-        # només els actualitzats darrers 10 min.
-        path = "Docs",
-        pattern = "html",
-        full.names = T)[file.mtime(list.files(
-          path = "Docs/",
-          pattern = "html",
-          full.names = T)) > (Sys.time() - 3000)]
-      )
-    )
- )
-
 )
-
-
-
-# library(targets, quietly = T, warn.conflicts = F, verbose = F)
-# options(tidyverse.quiet = TRUE)
-# library(tidyverse, quietly = T, warn.conflicts = F, verbose = F)
-# options(dplyr.summarise.inform = FALSE)
-# library(dplyr, warn.conflicts = FALSE)
-# # options(clustermq.scheduler = "multicore")
-# # library(clustermq)
-# library(future, quietly = T, warn.conflicts = F, verbose = F)
-# plan(cluster)
-# library(tarchetypes, quietly = T, warn.conflicts = F, verbose = F)
-# source("R/functions.R")

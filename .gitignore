@@ -1,5 +1,10 @@
 # Object file
 *.o
-
 # Ada Library Information
 *.ali
+.Rproj.user
+eu-silc_sim.Rproj
+.Rhistory
+.Rdata
+.httr-oauth
+.DS_Store

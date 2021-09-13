@@ -1,8 +1,5 @@
 # Funcions #
 
-# veure correccions pendents amb "ATENCIO CORRECCIO"
-
-
 # ------------------------------------####
 # FASE 1
 
@@ -283,7 +280,6 @@ mf_prob_durada_atur <- function(epa, UN){
 ## Target: probs_ERTO_sectors
 mf_prob_erto_sectors <- function(epa){
 
-  # read.csv2("Data/F1/ERTO_sector_sint.csv", fileEncoding = "UTF-8-BOM")
   z <- levels(epa$RZNOTB)[grep("expediente",
                                levels(epa$RZNOTB))]
 
@@ -305,10 +301,6 @@ mf_prob_erto_sectors <- function(epa){
 
 # ------------------------------------####
 # FASE 2
-
-# Pendents:
-## reponderació població (> mortalitat, < natalitat, > migració)
-
 
 # 1. carrega referències fixes per la simulació
 ## target: myrefs
@@ -395,9 +387,6 @@ COV_defineix_refs_sim <- function(F1_taula_probs_grups_ESP,
   return(myrefs)
 }
 
-# COV_skim_dataset <- function(nom_dades, vars_conserva){
-#
-# }
 
 # 2. deflactació de les variables de rendes
 ## semi-target: ecv
@@ -1030,8 +1019,6 @@ COV_fes_target_ecv <- function(dades,
 }
 
 
-
-
 # ------------------------------------####
 # FASE 3
 
@@ -1314,11 +1301,9 @@ COV_fes_target_ecv <- function(dades,
   ## @outputs: subconjunt dades amb vars. clau (dad)
   ## @arguments: seeds, aturats, cobren, ertos, dades, simrefs
   ## ATT:
-  #cal revisar que l'ordre dels arguments sigui correcte
-  #cal veure què aporta aquesta funció respecte fes_COV_calcula_rendes_llarg o viceversa. per què calen 2?
   fes_COV_calcula_rendes_curt  <- function(seeds, aturats, cobren, ertos, dades, simrefs){
     # stop()
-    # note to self: cal que aquesta passa sigui aquí, ja ho has intentat canviar i no funciona pq necessites tant dad com dades!:
+    # note to self: cal que aquesta passa sigui aquí
     dad <- dades[,simrefs$vector_refs]
     dad$IDllar <- stringr::str_sub(dad$ID,  end = -3)
 
@@ -1390,7 +1375,6 @@ COV_fes_target_ecv <- function(dades,
     set.seed(seeds)
     benef_IMV1 <-
       sample(
-        # segons dades amb 2018. veure 00_Pieces_setup_00.r
         x = pool1,
         size = floor(
           length(pool) *
@@ -1440,7 +1424,6 @@ COV_fes_target_ecv <- function(dades,
   ## @inputs: rendes (llista amb subconjunts vars rendes simulades)
   ## @outputs: resmat (matriu que agrupa conjunt resultats per simulacions)
   ## ATT:
-  # revisar/re-valorar si és imprescindible tenir 2 versions
   fes_COV_calcula_indicadors_llarg <- function(rendes){
     # stop()
     # crea matriu resultats
@@ -1536,7 +1519,6 @@ COV_fes_target_ecv <- function(dades,
   ## @inputs: rendes (llista amb subconjunts vars rendes simulades)
   ## @outputs: resmat (matriu que agrupa conjunt resultats per simulacions)
   ## ATT:
-  # revisar/re-valorar si és imprescindible tenir 2 versions
   fes_COV_calcula_indicadors_curt  <- function(rendes, dades, simrefs){
     # stop()
 
@@ -1661,19 +1643,14 @@ COV_fes_target_ecv <- function(dades,
         dle = abs(Mediana_IE              - rl_e)
       ) %>%
       select(contains("dl")) %>%
-      # en fer simulació per bcn obtinc resultats raros i no diferències consistents entre u3 i u5. torno a donar major rellevància a rendes
-      # mutate(across(.cols = everything(.),
-      #               .fns = scales::rescale)) %>%
       rowSums(.)
 
     # Selecciona most likely
     idx <- which(sumdifs == min(sumdifs))
 
     # Replica most likely (amb funcions long) o escenari desitjat
-    # if(length(resmat$seeds) > 1){
     simrefs$seed            <- resmat$seeds[idx]
     simrefs$iteracions      <- 1
-    # }
 
     lkl_reslist <- fes_COV_reslist_seeds(
       simrefs
@@ -1755,8 +1732,6 @@ COV_fes_target_ecv <- function(dades,
   ## Definició: Pren els sub-targets de sims i agrupa'ls en un conjunt únic
   ## @inputs: ruta
   ## @outputs: matriu de resultats
-  ## ATT: cal definir ordre d'execució pq no té dependència lògica de target sims
-  ## 210609: he modificat funció, incloent seed, ja que la parelelització em feia un scramble amb seeds. order unreliable.Aquest canvi afecta també a la funció fes_COV_most_likely_curt
   fes_COV_res_mat <- function(ruta){
   list.files(path = ruta,
              pattern = "^sims_",
@@ -1770,19 +1745,6 @@ COV_fes_target_ecv <- function(dades,
     do.call(args = .,
             what = "bind_rows")
 }
-
-#   fes_COV_res_mat <- function(ruta){
-#   list.files(path = ruta,
-#              pattern = "^sims_",
-#              full.names = T) %>%
-#     lapply(., function(x){
-#       readRDS(x) %>%
-#         pluck(., "resmat")
-#     }) %>%
-#     do.call(args = .,
-#             what = "bind_rows")
-# }
-#
 
 # Update simrefs amb paràmetres mòbils a partir de l'excel
   upd_smrf <- function(smrf, params, dd){
@@ -1889,7 +1851,7 @@ COV_fes_target_ecv <- function(dades,
   replica <- dades
   rm("dades")
 
-    # Calcula rendes individuals si tot l'erto passa per circuit atur (CF1) ####
+    # Calcula rendes individuals si tot l'erto passa per circuit atur (CF1) en contrafàctic ####
     ### assigna aleatòriament quins ertos cobren atur i transforma a atur
     pool <- replica[replica$COV_select_erto, c("ID", "COV_prob_cobrar_atur")]
     set.seed(myseed)

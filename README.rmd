@@ -1,9 +1,10 @@
 ---
 title: "README"
-author: "Irene Cruz"
+author: "IERMB - Àrea Cohesió Social i Urbana"
 output:
-      html_document:
-        keep_md: true
+  html_document:
+    keep_md: yes
+  word_document: default
 ---
 
 
@@ -15,20 +16,23 @@ A continuación se describe el procedimiento seguido:
 
 La simulación se divide en un proceso de cuatro etapas, cada una de las cuales se define por el tipo de resultado que produce.
 
-* i.	En la primera etapa, usamos los datos más recientes sobre la situación del mercado laboral y extraemos los parámetros a nivel macro (p.e., tasas de desempleo) y a nivel micro (p.e., probabilidades individuales de sufrir desempleo).
-* ii.	En la etapa dos, la última edición de la ECV se actualiza, generando un conjunto de variables necesarias para la simulación. Por una parte, se asignan las probabilidades a nivel micro extraídas en la etapa uno. Esta etapa también incluye el cálculo de los ingresos individuales en caso de pérdida del empleo o de ser afectado por un expediente de regulación temporal del empleo (ERTE). El resultado de la etapa dos es una nueva versión de la ECV que incluye tanto los datos de ingresos originales como los datos simulados de diferentes escenarios posibles a nivel individual.
-* iii.	En la etapa tres se define un modelo con los mecanismos que activan los cambios de rentas a nivel individual i que dan como resultado los parámetros a nivel macro definidos en la etapa uno. Una simulación de Monte Carlo ejecuta el proceso de forma iterativa. En cada iteración de la simulación, se selecciona cuasi-aleatoriamente un conjunto de individuos (de acuerdo con las probabilidades individuales calculadas en la etapa 1) que se verán afectados por las distintas situaciones previstas con efecto sobre las rentas. Se recalculan los ingresos individuales de cada individuo seleccionado. Posteriormente, se recalculan los ingresos a nivel del hogar y se asignan (cuasi-aleatoriamente) las transferencias públicas (ingreso mínimo vital) entre los casos que cumplen los requisitos de elegibilidad. Una vez que se establecen las rentas del hogar simuladas, se calculan los indicadores estándar de distribución de los ingresos (p.e., índice de Gini, riesgo de pobreza, QIR). Este proceso se replica un elevado número de veces, dando lugar a una distribución probabilística de los indicadores sintéticos.
-* iv.	La cuarta etapa consiste en el análisis de los resultados agregados y la identificación de la iteración que podría considerarse como “el escenario más plausible”, en virtud de tener el conjunto de resultados que más se asemeja al promedio del conjunto de simulaciones.
+> i.	En la primera etapa, usamos los datos más recientes sobre la situación del mercado laboral y extraemos los parámetros a nivel macro (p.e., tasas de desempleo) y a nivel micro (p.e., probabilidades individuales de sufrir desempleo).
+
+> ii.	En la etapa dos, la última edición de la ECV se actualiza, generando un conjunto de variables necesarias para la simulación. Por una parte, se asignan las probabilidades a nivel micro extraídas en la etapa uno. Esta etapa también incluye el cálculo de los ingresos individuales en caso de pérdida del empleo o de ser afectado por un expediente de regulación temporal del empleo (ERTE). El resultado de la etapa dos es una nueva versión de la ECV que incluye tanto los datos de ingresos originales como los datos simulados de diferentes escenarios posibles a nivel individual.
+
+> iii.	En la etapa tres se define un modelo con los mecanismos que activan los cambios de rentas a nivel individual i que dan como resultado los parámetros a nivel macro definidos en la etapa uno. Una simulación de Monte Carlo ejecuta el proceso de forma iterativa. En cada iteración de la simulación, se selecciona cuasi-aleatoriamente un conjunto de individuos (de acuerdo con las probabilidades individuales calculadas en la etapa 1) que se verán afectados por las distintas situaciones previstas con efecto sobre las rentas. Se recalculan los ingresos individuales de cada individuo seleccionado. Posteriormente, se recalculan los ingresos a nivel del hogar y se asignan (cuasi-aleatoriamente) las transferencias públicas (ingreso mínimo vital) entre los casos que cumplen los requisitos de elegibilidad. Una vez que se establecen las rentas del hogar simuladas, se calculan los indicadores estándar de distribución de los ingresos (p.e., índice de Gini, riesgo de pobreza, QIR). Este proceso se replica un elevado número de veces, dando lugar a una distribución probabilística de los indicadores sintéticos.
+
+> iv.	La cuarta etapa consiste en el análisis de los resultados agregados y la identificación de la iteración que podría considerarse como “el escenario más plausible”, en virtud de tener el conjunto de resultados que más se asemeja al promedio del conjunto de simulaciones.
 
 La Figura I sintetiza el procedimiento como diagrama de flujo. Cada una de las etapas se define con mayor detalle a continuación.
 
-![Figura 1: Workflow](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-08-06 at 12.49.21.png){width=100%}
+![Figura 1: Workflow del proceso de simulación](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-08-06 at 12.49.21.png){width=100%}
 
 ### Etapa 1. 
 
 La EPA española para el año 2020 se utiliza para calcular tanto las tasas de desempleo, como las probabilidades individuales de desempleo, las probabilidades de cobrar una prestación de desempleo y la duración estimada del desempleo.
 
-Las probabilidades observadas de sufrir desempleo se calculan mediante una regresión logística (función de enlace logit), en la que el sexo, la edad, el país de nacimiento y el nivel de calificación laboral son las variables independientes. Se ha observado que estos atributos sociales están altamente asociados con la situación laboral en este contexto particular, así como a nivel internacional y en particular en la crisis de covid19 (Joyce, Xu, 2020; Adams-Prass, Boneva, Golin et al., 2020)
+Las probabilidades observadas de sufrir desempleo se calculan mediante una regresión logística (función de enlace logit), en la que el sexo, la edad, el país de nacimiento y la categoría ocupacional son las variables independientes. Se ha observado que estos atributos sociales están altamente asociados con la situación laboral en este contexto particular, así como a nivel internacional y en particular en la crisis de covid19 (Joyce, Xu, 2020; Adams-Prass, Boneva, Golin et al., 2020)
 Los datos para calcular la cobertura, los importes y la duración de los expedientes de regulación temporal de empleo (ERTES y programa equivalente para autónomos) y el ingreso mínimo vital (IMV) se basan en los datos publicados por el Ministerio de Inclusión, Seguridad Social y Migraciones.  
 
 ### Etapa 2. 
@@ -60,7 +64,7 @@ Siempre que una persona sufra una modificación en sus rentas del trabajo de acu
 
 Una vez realizados los cálculos en la simulación de rentas individuales, se procede a recalcular las rentas agregadas a nivel de hogar y se asignan las transferencias a esta escala (el ingreso mínimo vital):
 
-- **Suceso aleatorio 4** – recibir una prestación de ingreso mínimo vital: Una vez recalculadas las rentas a nivel de hogar, se determina para cada unidad si cumple los requisitos de elegibilidad del programa . Entre la población elegible, se hace una selección aleatoria de los hogares beneficiarios, y se recalculan en consecuencia las rentas del hogar y sus ingresos equivalentes. 
+- **Suceso aleatorio 4** – recibir una prestación de ingreso mínimo vital: Una vez recalculadas las rentas a nivel de hogar, se determina para cada unidad si cumple los requisitos de elegibilidad del programa. Entre la población elegible, se hace una selección aleatoria de los hogares beneficiarios, y se recalculan en consecuencia las rentas del hogar y sus ingresos equivalentes. 
 
 Finalmente, a partir de la muestra con las nuevas rentas individuales y del hogar simuladas, se calcula una batería de indicadores sintéticos que dan cuenta de su distribución, incluyendo: el valor medio de las rentas de los hogares, la mediana de los ingresos equivalentes, el índice de Gini, la tasa de riesgo de pobreza moderada (60% de la mediana), y la tasa de riesgo de pobreza extrema (30% de la mediana). 
 
@@ -69,10 +73,10 @@ Finalmente, a partir de la muestra con las nuevas rentas individuales y del hoga
 El resultado de la etapa anterior es un conjunto de datos con tantas columnas como indicadores estimados, y tantas filas como iteraciones realizadas para la simulación. Este conjunto de datos se analiza con dos fines: 1) testar la calidad del procedimiento, 2) comprender la distribución de los resultados obtenidos. Los tests realizados con estos fines incluyen: verificar la normalidad de los resultados obtenidos, evaluar los intervalos de confianza de las estimaciones y el rango de variabilidad obtenida, contrastar los coeficientes de variación de los resultados, verificar la concordancia entre las tasas proyectadas y las obtenidas después de la ponderación de los resultados. 
 
 
-![Figura 2: Muestra resultados 1](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-08-06 at 11.55.25.png){width=60%}
+![Figura 2: Muestra de resultados 1: simulación para la ECV-España.](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-08-06 at 11.55.25.png){width=60%}
 
 
 Por último, se calcula para cada iteración de la simulación una medida de distancia respecto a los valores medios del conjunto de simulaciones, y se extrae la referencia donde ésta sea menor. Puesto que los resultados de los indicadores clave tienen una distribución normal, se considera a la iteración más similar al promedio como el escenario más probable o plausible. Este escenario es extraído para realizar análisis a nivel micro.   
 
 
-![Figura 3: Muestra resultados 2](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-08-06 at 11.56.27.png){width=60%}
+![Figura 3: Muestra resultados 2: simulación para EMCV-Área Metropolitana de Barcelona](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-09-13 at 08.44.58.png){width=60%}

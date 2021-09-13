@@ -1,7 +1,5 @@
 # # #   # # #   # # #   # # #   # # #   # # #   # # #   # # # 
-# Tipus: source
 # Descripció: Computa qualsevol combinació de ràtios de renda tipus P
-# Data: 2018/11/05
 # # #   # # #   # # #   # # #   # # #   # # #   # # #   # # # 
 
 
