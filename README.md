@@ -4,7 +4,6 @@ author: "Irene Cruz, Lara Navarro-Varas, Sergio Porcel. Àrea Cohesió Social i 
 output:
   html_document:
     keep_md: yes
-  word_document: default
 ---
 
 
