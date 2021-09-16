@@ -1,6 +1,6 @@
 ---
 title: "README"
-author: "IERMB - Àrea Cohesió Social i Urbana"
+author: "Irene Cruz, Lara Navarro-Varas, Sergio Porcel. Àrea Cohesió Social i Urbana - IERMB"
 output:
   html_document:
     keep_md: yes
