@@ -1,19 +1,16 @@
-# YAML 1.2
----
 cff-version: 1.1.0
 message: "If you use this repo, please cite it as below."
 authors:
   - family-names: "Irene"
-given-names: "Cruz"
-orcid: "https://orcid.org/0000-0003-0980-5078"
+    given-names: "Cruz"
+    orcid: "https://orcid.org/0000-0003-0980-5078"
   - family-names: "Lara"
-given-names: "Navarro-Varas"
-orcid: " https://orcid.org/0000-0002-5896-4756"
+    given-names: "Navarro-Varas"
+    orcid: " https://orcid.org/0000-0002-5896-4756"
   - family-names: "Sergio"
-given-names: "Porcel"
-orcid: " https://orcid.org/0000-0001-6307-9754"
+    given-names: "Porcel"
+    orcid: " https://orcid.org/0000-0001-6307-9754"
 title: "eu-silc_sim [EU-SILC Nowcasting Microsimulation] - README"
 version: 2.0
 date-released: 2021-09-13
 url: "https://github.com/icg-cat/eu-silc_sim"
-...
