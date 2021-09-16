@@ -26,7 +26,8 @@ La simulación se divide en un proceso de cuatro etapas, cada una de las cuales 
 
 La Figura I sintetiza el procedimiento como diagrama de flujo. Cada una de las etapas se define con mayor detalle a continuación.
 
-![Figura 1: Workflow del proceso de simulación](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-08-06 at 12.49.21.png){width=100%}
+**Figura 1: Workflow del proceso de simulación**
+![Figura 1: Workflow del proceso de simulación](https://github.com/icg-cat/eu-silc_sim/blob/main/Documentation/Screenshot%202021-08-06%20at%2012.49.21.png)
 
 ### Etapa 1. 
 
@@ -72,11 +73,11 @@ Finalmente, a partir de la muestra con las nuevas rentas individuales y del hoga
 
 El resultado de la etapa anterior es un conjunto de datos con tantas columnas como indicadores estimados, y tantas filas como iteraciones realizadas para la simulación. Este conjunto de datos se analiza con dos fines: 1) testar la calidad del procedimiento, 2) comprender la distribución de los resultados obtenidos. Los tests realizados con estos fines incluyen: verificar la normalidad de los resultados obtenidos, evaluar los intervalos de confianza de las estimaciones y el rango de variabilidad obtenida, contrastar los coeficientes de variación de los resultados, verificar la concordancia entre las tasas proyectadas y las obtenidas después de la ponderación de los resultados. 
 
-
-![Figura 2: Muestra de resultados 1: simulación para la ECV-España.](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-08-06 at 11.55.25.png){width=60%}
+**Figura 2: Muestra de resultados 1: simulación para la ECV-España.**
+![Figura 2: Muestra de resultados 1: simulación para la ECV-España.](https://github.com/icg-cat/eu-silc_sim/blob/main/Documentation/Screenshot%202021-08-06%20at%2011.55.25.png)
 
 
 Por último, se calcula para cada iteración de la simulación una medida de distancia respecto a los valores medios del conjunto de simulaciones, y se extrae la referencia donde ésta sea menor. Puesto que los resultados de los indicadores clave tienen una distribución normal, se considera a la iteración más similar al promedio como el escenario más probable o plausible. Este escenario es extraído para realizar análisis a nivel micro.   
 
-
-![Figura 3: Muestra resultados 2: simulación para EMCV-Área Metropolitana de Barcelona](/Users/irenecg/Dropbox/2. Laboral/IERMB/1_Projectes_en_curs/eu-silc_sim/Documentation/Screenshot 2021-09-13 at 08.44.58.png){width=60%}
+**Figura 3: Muestra resultados 2: simulación para EMCV-Área Metropolitana de Barcelona**
+![Figura 3: Muestra resultados 2: simulación para EMCV-Área Metropolitana de Barcelona](https://github.com/icg-cat/eu-silc_sim/blob/main/Documentation/Screenshot%202021-09-13%20at%2008.44.58.png)
